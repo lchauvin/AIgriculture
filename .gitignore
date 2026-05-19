@@ -1,0 +1,100 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+.python-version
+
+# Test / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Jupyter
+.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+
+# ---- Node / Next.js ----
+node_modules/
+.next/
+out/
+.npm
+.yarn/cache
+.yarn/install-state.gz
+.pnp.*
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Geospatial / scientific data ----
+# Anything in data/ is by default not committed; check in by exception via
+# `git add -f path/to/file`.
+data/raw/
+data/processed/
+data/cache/
+
+# Common gridded / geospatial formats that should never be in git
+*.nc
+*.nc4
+*.hdf
+*.hdf5
+*.h5
+*.grib
+*.grib2
+*.tif
+*.tiff
+*.geotiff
+*.zarr/
+*.bil
+*.bsq
+*.bip
+*.img
+
+# Climate / EO archives
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# Parquet — usually data; allow case-by-case via `git add -f`
+*.parquet
+
+# ---- Secrets & local config ----
+.env
+.env.local
+.env.*.local
+*.secret
+credentials.json
+cdsapirc
+.cdsapirc
+.ee_token
+
+# ---- Editor / OS ----
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ---- Tool-specific local config (Claude Code, Cursor, etc.) ----
+.claude/settings.local.json
+.cursor/
+
