@@ -103,6 +103,43 @@ def test_bbox_makes_it_into_cds_area(
     assert sent_area == [46.5, -74.5, 45.5, -73.5]  # N, W, S, E
 
 
+def test_multi_variable_load_returns_named_dataset(
+    tmp_cache_dir: Path,
+    fake_cds_client,
+    quebec_bbox,
+    jan_2020,
+):
+    """Two variables should produce a Dataset with two correctly named
+    data variables (regardless of the CDS internal naming)."""
+    src = AgERA5Source(cache_dir=tmp_cache_dir, api_client=fake_cds_client)
+    ds = src.load(
+        bbox=quebec_bbox,
+        time_range=jan_2020,
+        variables=("t2m_min", "t2m_max"),
+    )
+    assert set(ds.data_vars) == {"t2m_min", "t2m_max"}
+    assert ds.sizes["time"] == 31
+
+
+def test_multi_month_load_concatenates_time(
+    tmp_cache_dir: Path,
+    fake_cds_client,
+    quebec_bbox,
+):
+    """A time range spanning two months should produce a single
+    contiguous time axis."""
+    src = AgERA5Source(cache_dir=tmp_cache_dir, api_client=fake_cds_client)
+    ds = src.load(
+        bbox=quebec_bbox,
+        time_range=(date(2020, 1, 15), date(2020, 2, 14)),
+        variables=("t2m_mean",),
+    )
+    assert ds.sizes["time"] == 31  # Jan 15..31 + Feb 1..14
+    # Dates are monotonically increasing.
+    times = ds["time"].values
+    assert (times[1:] > times[:-1]).all()
+
+
 def test_returned_data_is_numeric(
     tmp_cache_dir: Path,
     fake_cds_client,

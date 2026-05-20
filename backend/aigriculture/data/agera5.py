@@ -25,6 +25,8 @@ any NetCDF already on disk.
 
 from __future__ import annotations
 
+import tempfile
+import zipfile
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -64,13 +66,19 @@ class _VarSpec:
 
 
 # Minimal Tier-2-ready bundle. Extend in Phase 3 if/when more variables are
-# needed (solar radiation, RH at multiple hours, etc.).
+# needed (RH at multiple hours, vapour pressure, ET0, etc.).
+#
+# Statistic names must match the AgERA5 catalogue exactly. 2m_temperature's
+# canonical daily Tmin is `night_time_minimum`; `24_hour_minimum` is *not*
+# a valid statistic for that variable. precipitation_flux and
+# solar_radiation_flux are 24-hour aggregates already; the CDS adaptor
+# rejects a `statistic` argument for them.
 _VARS: dict[str, _VarSpec] = {
-    "t2m_min": _VarSpec("t2m_min", "2m_temperature", "24_hour_minimum"),
+    "t2m_min": _VarSpec("t2m_min", "2m_temperature", "night_time_minimum"),
     "t2m_max": _VarSpec("t2m_max", "2m_temperature", "24_hour_maximum"),
     "t2m_mean": _VarSpec("t2m_mean", "2m_temperature", "24_hour_mean"),
-    "precip": _VarSpec("precip", "precipitation_flux", "24_hour_mean"),
-    "solar_rad": _VarSpec("solar_rad", "solar_radiation_flux", "24_hour_mean"),
+    "precip": _VarSpec("precip", "precipitation_flux", ""),
+    "solar_rad": _VarSpec("solar_rad", "solar_radiation_flux", ""),
 }
 
 
@@ -89,7 +97,9 @@ class AgERA5Source(DataSource):
     """
 
     name = "agera5"
-    version = "1.1"  # CDS dataset version
+    # The CDS catalogue uses underscored version strings; "1_1" is the
+    # long-stable v1.1. AgERA5 v2.0 ("2_0") was released June 2025.
+    version = "1_1"
     backend = "local"
     source_url = SOURCE_URL
     license = LICENSE
@@ -133,25 +143,44 @@ class AgERA5Source(DataSource):
         validate_bbox(bbox)
         validate_time_range(time_range)
         var_keys = self._resolve_variables(variables)
+        months = _month_iter(*time_range)
 
-        files: list[Path] = []
-        for year, month in _month_iter(*time_range):
+        # 1) Download every (variable × month) NetCDF we don't already have.
+        for year, month in months:
             for key in var_keys:
                 spec = _VARS[key]
                 fp = self._cache_path(spec, year, month, bbox)
                 if not fp.exists():
                     self._download_month(spec, year, month, bbox, fp)
-                files.append(fp)
 
-        ds = xr.open_mfdataset(files, combine="by_coords", chunks={"time": 30})
+        # 2) For each variable, concat its monthly NetCDFs across time and
+        #    rename the single internal data variable to our out-name.
+        #    AgERA5 NetCDFs carry statistic-specific variable names like
+        #    ``Temperature_Air_2m_Min_24h``; we don't depend on them.
+        per_variable: dict[str, xr.DataArray] = {}
+        for key in var_keys:
+            spec = _VARS[key]
+            months_da: list[xr.DataArray] = []
+            for year, month in months:
+                fp = self._cache_path(spec, year, month, bbox)
+                ds_one = xr.open_dataset(fp, chunks={"time": 30})
+                data_vars = list(ds_one.data_vars)
+                if len(data_vars) != 1:
+                    raise RuntimeError(
+                        f"Expected exactly one data variable in {fp.name}, "
+                        f"found {data_vars!r}."
+                    )
+                da = ds_one[data_vars[0]].rename(key)
+                months_da.append(da)
+            per_variable[key] = (
+                months_da[0] if len(months_da) == 1
+                else xr.concat(months_da, dim="time")
+            )
+
+        ds = xr.Dataset(per_variable)
         ds = ds.sel(
             time=slice(time_range[0].isoformat(), time_range[1].isoformat()),
         )
-        # Rename CDS variables to our public names. AgERA5 NetCDFs name the
-        # variable after the CDS ``variable`` field (e.g. ``Temperature_Air_2m_Mean_24h``);
-        # the exact name is statistic-dependent. We rename by position.
-        ds = self._normalize_variable_names(ds, var_keys)
-        # Attach provenance as a global attribute for traceability.
         ds.attrs["aigriculture.provenance"] = self.provenance(
             bbox=bbox,
             time_range=time_range,
@@ -190,17 +219,34 @@ class AgERA5Source(DataSource):
         # CDS expects area as [north, west, south, east].
         area = [maxy, minx, miny, maxx]
         days = [f"{d:02d}" for d in range(1, _days_in_month(year, month) + 1)]
-        request = {
-            "format": "netcdf",
+        request: dict[str, object] = {
             "variable": spec.cds_variable,
-            "statistic": spec.cds_statistic,
             "year": f"{year:04d}",
             "month": f"{month:02d}",
             "day": days,
             "area": area,
             "version": self.version,
         }
-        client.retrieve(DATASET_ID, request, str(out))  # type: ignore[attr-defined]
+        # AgERA5 only requires (and accepts) a `statistic` for variables
+        # that have multiple daily aggregations — e.g. 2m_temperature.
+        # Sending an empty `statistic` for variables that don't accept one
+        # (precipitation_flux, solar_radiation_flux) causes a 400.
+        if spec.cds_statistic:
+            request["statistic"] = spec.cds_statistic
+        # The dataset only ships data as a zip archive (containing the
+        # NetCDF inside). The CDS adaptor silently overrides any other
+        # `format` value and logs a warning, so we ask for zip explicitly.
+        request["format"] = "zip"
+
+        with tempfile.NamedTemporaryFile(
+            suffix=".zip", dir=self.cache_dir, delete=False
+        ) as tmp:
+            zip_path = Path(tmp.name)
+        try:
+            client.retrieve(DATASET_ID, request, str(zip_path))  # type: ignore[attr-defined]
+            _extract_single_netcdf(zip_path, out)
+        finally:
+            zip_path.unlink(missing_ok=True)
 
     def _get_client(self) -> object:
         if self._client is not None:
@@ -211,19 +257,6 @@ class AgERA5Source(DataSource):
         self._client = cdsapi.Client()
         return self._client
 
-    @staticmethod
-    def _normalize_variable_names(ds: xr.Dataset, requested: Sequence[str]) -> xr.Dataset:
-        """Best-effort rename of CDS-named variables to AgERA5Source out-names.
-
-        AgERA5 NetCDFs include long, statistic-specific variable names. When
-        the file contains exactly one data variable, we rename it to the
-        requested out-name. When there are several we leave them untouched
-        and trust downstream selection via ``ds[var_name]``.
-        """
-        data_vars = [v for v in ds.data_vars]
-        if len(data_vars) == 1 and len(requested) == 1:
-            return ds.rename({data_vars[0]: requested[0]})
-        return ds
 
 
 # ---- helpers ----------------------------------------------------------------
@@ -233,6 +266,32 @@ def _days_in_month(year: int, month: int) -> int:
     from calendar import monthrange
 
     return monthrange(year, month)[1]
+
+
+def _extract_single_netcdf(zip_path: Path, dest: Path) -> None:
+    """Extract the single NetCDF from a CDS-delivered AgERA5 zip into ``dest``.
+
+    The CDS packages AgERA5 month requests as a zip containing exactly one
+    ``.nc`` file per (variable, statistic) request. We do not assume the
+    filename inside the archive — just take the first ``.nc`` entry.
+    """
+    with zipfile.ZipFile(zip_path) as zf:
+        members = [n for n in zf.namelist() if n.lower().endswith(".nc")]
+        if not members:
+            raise RuntimeError(
+                f"AgERA5 zip {zip_path.name} contains no .nc member; "
+                f"members were {zf.namelist()!r}"
+            )
+        if len(members) > 1:
+            # AgERA5 single-month requests should produce exactly one NetCDF.
+            # If that ever changes, we want a loud failure rather than a
+            # silent first-wins selection.
+            raise RuntimeError(
+                f"AgERA5 zip {zip_path.name} unexpectedly contains "
+                f"{len(members)} .nc members: {members!r}"
+            )
+        with zf.open(members[0]) as src, dest.open("wb") as dst:
+            dst.write(src.read())
 
 
 def _month_iter(start: date, end: date) -> list[tuple[int, int]]:

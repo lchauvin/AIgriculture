@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -48,25 +49,42 @@ def _make_synthetic_agera5(
 
 
 class FakeCDSClient:
-    """Pytest stand-in for `cdsapi.Client` that writes synthetic NetCDFs."""
+    """Pytest stand-in for ``cdsapi.Client`` that writes synthetic zip-wrapped
+    NetCDFs matching the real AgERA5 delivery format."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, object], str]] = []
 
     def retrieve(self, dataset_id: str, request: dict[str, object], target: str) -> None:
+        import zipfile
+
         self.calls.append((dataset_id, dict(request), target))
-        # `area` is [north, west, south, east]; reconstruct (minx, miny, maxx, maxy).
+        # ``area`` is [north, west, south, east]; reconstruct
+        # (minx, miny, maxx, maxy).
         area = request["area"]
         bbox = (area[1], area[2], area[3], area[0])  # type: ignore[index]
         year = int(request["year"])  # type: ignore[arg-type]
         month = int(request["month"])  # type: ignore[arg-type]
+        statistic = str(request.get("statistic", "raw"))
         ds = _make_synthetic_agera5(
-            var_long_name=f"AgERA5_{request['variable']}_{request['statistic']}",
+            var_long_name=f"AgERA5_{request['variable']}_{statistic}",
             bbox=bbox,
             year=year,
             month=month,
         )
-        ds.to_netcdf(target)
+        # AgERA5 always delivers a zip containing exactly one NetCDF.
+        with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
+            ds.to_netcdf(tmp.name)
+            nc_path = Path(tmp.name)
+        try:
+            with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.write(
+                    nc_path,
+                    arcname=f"agera5_{request['variable']}_{statistic}_"
+                    f"{year:04d}{month:02d}.nc",
+                )
+        finally:
+            nc_path.unlink(missing_ok=True)
 
 
 @pytest.fixture
