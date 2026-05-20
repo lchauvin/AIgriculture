@@ -169,14 +169,9 @@ class AgERA5Source(DataSource):
             months_da: list[xr.DataArray] = []
             for year, month in months:
                 fp = self._cache_path(spec, year, month, bbox)
-                ds_one = xr.open_dataset(fp, chunks={"time": 30})
-                data_vars = list(ds_one.data_vars)
-                if len(data_vars) != 1:
-                    raise RuntimeError(
-                        f"Expected exactly one data variable in {fp.name}, "
-                        f"found {data_vars!r}."
-                    )
-                da = ds_one[data_vars[0]].rename(key)
+                ds_one = xr.open_dataset(fp, chunks={"time": -1})
+                gridded = _select_gridded_data_var(ds_one, fp)
+                da = ds_one[gridded].rename(key)
                 months_da.append(da)
             per_variable[key] = (
                 months_da[0] if len(months_da) == 1
@@ -274,6 +269,27 @@ def _days_in_month(year: int, month: int) -> int:
     return monthrange(year, month)[1]
 
 
+def _select_gridded_data_var(ds: xr.Dataset, fp: Path) -> str:
+    """Return the name of the single gridded data variable in ``ds``.
+
+    AgERA5 NetCDFs follow CF Conventions and include a scalar ``crs``
+    metadata variable alongside the actual data field (e.g.
+    ``Temperature_Air_2m_Min_Night_Time``). The gridded variable is the
+    one with at least two spatial dimensions; the metadata variables are
+    scalars or 1D.
+    """
+    candidates = [
+        name for name, var in ds.data_vars.items()
+        if var.ndim >= 2
+    ]
+    if len(candidates) != 1:
+        raise RuntimeError(
+            f"Expected exactly one gridded data variable in {fp.name}, "
+            f"found {candidates!r} (all data_vars: {list(ds.data_vars)!r})."
+        )
+    return candidates[0]
+
+
 def _extract_and_concat_zip_to_netcdf(zip_path: Path, dest: Path) -> None:
     """Build a single monthly NetCDF from a CDS-delivered AgERA5 zip.
 
@@ -307,6 +323,13 @@ def _extract_and_concat_zip_to_netcdf(zip_path: Path, dest: Path) -> None:
                 ds = xr.open_mfdataset(
                     [str(p) for p in extracted],
                     combine="by_coords",
+                    # AgERA5 dailies include a duplicate scalar `crs` per
+                    # file. ``data_vars="minimal"`` skips duplicating it
+                    # along the new time axis (and pins the now-deprecated
+                    # default ahead of xarray's behaviour change).
+                    data_vars="minimal",
+                    coords="minimal",
+                    compat="override",
                 )
 
             # Materialize before writing — we're about to close the temp dir.

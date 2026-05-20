@@ -45,7 +45,17 @@ def _make_synthetic_agera5(
         dims=("time", "lat", "lon"),
         name=var_long_name,
     )
-    return da.to_dataset()
+    ds = da.to_dataset()
+    # Match the real AgERA5 NetCDF layout: include a scalar `crs` metadata
+    # variable alongside the gridded data, per CF Conventions.
+    ds["crs"] = xr.DataArray(
+        np.int32(0),
+        attrs={
+            "grid_mapping_name": "latitude_longitude",
+            "long_name": "CRS definition",
+        },
+    )
+    return ds
 
 
 class FakeCDSClient:
