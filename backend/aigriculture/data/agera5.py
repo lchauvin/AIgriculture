@@ -97,9 +97,11 @@ class AgERA5Source(DataSource):
     """
 
     name = "agera5"
-    # The CDS catalogue uses underscored version strings; "1_1" is the
-    # long-stable v1.1. AgERA5 v2.0 ("2_0") was released June 2025.
-    version = "1_1"
+    # AgERA5 v2 is the current production version. v1.1 is being deprecated
+    # on 2026-06-17 and is also known to contain two corrected-in-v2 data
+    # bugs (rogue Tmin-24h values; Tmean > Tmax). We always pull v2 unless
+    # the caller deliberately overrides it via the constructor.
+    version = "2_0"
     backend = "local"
     source_url = SOURCE_URL
     license = LICENSE
@@ -109,10 +111,14 @@ class AgERA5Source(DataSource):
         self,
         cache_dir: str | Path,
         api_client: object | None = None,
+        version: str | None = None,
     ) -> None:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._client = api_client
+        if version is not None:
+            # instance override; class default stays "2_0"
+            self.version = version
 
     # ---- DataSource interface ------------------------------------------------
 
@@ -244,7 +250,7 @@ class AgERA5Source(DataSource):
             zip_path = Path(tmp.name)
         try:
             client.retrieve(DATASET_ID, request, str(zip_path))  # type: ignore[attr-defined]
-            _extract_single_netcdf(zip_path, out)
+            _extract_and_concat_zip_to_netcdf(zip_path, out)
         finally:
             zip_path.unlink(missing_ok=True)
 
@@ -268,30 +274,45 @@ def _days_in_month(year: int, month: int) -> int:
     return monthrange(year, month)[1]
 
 
-def _extract_single_netcdf(zip_path: Path, dest: Path) -> None:
-    """Extract the single NetCDF from a CDS-delivered AgERA5 zip into ``dest``.
+def _extract_and_concat_zip_to_netcdf(zip_path: Path, dest: Path) -> None:
+    """Build a single monthly NetCDF from a CDS-delivered AgERA5 zip.
 
-    The CDS packages AgERA5 month requests as a zip containing exactly one
-    ``.nc`` file per (variable, statistic) request. We do not assume the
-    filename inside the archive — just take the first ``.nc`` entry.
+    The CDS packages an AgERA5 ``(variable, statistic, month)`` request as
+    a zip containing **one NetCDF per day**, each with a single time step.
+    We extract all NetCDFs to a temp directory, concatenate them along the
+    time dimension, and write a single monthly NetCDF to ``dest`` — the
+    canonical cache layout AIgriculture's load() expects.
     """
     with zipfile.ZipFile(zip_path) as zf:
-        members = [n for n in zf.namelist() if n.lower().endswith(".nc")]
+        members = sorted(n for n in zf.namelist() if n.lower().endswith(".nc"))
         if not members:
             raise RuntimeError(
                 f"AgERA5 zip {zip_path.name} contains no .nc member; "
                 f"members were {zf.namelist()!r}"
             )
-        if len(members) > 1:
-            # AgERA5 single-month requests should produce exactly one NetCDF.
-            # If that ever changes, we want a loud failure rather than a
-            # silent first-wins selection.
-            raise RuntimeError(
-                f"AgERA5 zip {zip_path.name} unexpectedly contains "
-                f"{len(members)} .nc members: {members!r}"
-            )
-        with zf.open(members[0]) as src, dest.open("wb") as dst:
-            dst.write(src.read())
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            extracted: list[Path] = []
+            for m in members:
+                # Flatten any internal subdirectories — CDS member names
+                # historically include slashes only for the v1.1 archive.
+                out = tdp / Path(m).name
+                with zf.open(m) as src, out.open("wb") as dst:
+                    dst.write(src.read())
+                extracted.append(out)
+
+            if len(extracted) == 1:
+                ds = xr.open_dataset(extracted[0])
+            else:
+                ds = xr.open_mfdataset(
+                    [str(p) for p in extracted],
+                    combine="by_coords",
+                )
+
+            # Materialize before writing — we're about to close the temp dir.
+            ds = ds.load()
+            ds.to_netcdf(dest)
+            ds.close()
 
 
 def _month_iter(start: date, end: date) -> list[tuple[int, int]]:

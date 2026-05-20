@@ -57,6 +57,7 @@ class FakeCDSClient:
 
     def retrieve(self, dataset_id: str, request: dict[str, object], target: str) -> None:
         import zipfile
+        from calendar import monthrange
 
         self.calls.append((dataset_id, dict(request), target))
         # ``area`` is [north, west, south, east]; reconstruct
@@ -66,25 +67,26 @@ class FakeCDSClient:
         year = int(request["year"])  # type: ignore[arg-type]
         month = int(request["month"])  # type: ignore[arg-type]
         statistic = str(request.get("statistic", "raw"))
-        ds = _make_synthetic_agera5(
-            var_long_name=f"AgERA5_{request['variable']}_{statistic}",
-            bbox=bbox,
-            year=year,
-            month=month,
+        long_name = f"AgERA5_{request['variable']}_{statistic}"
+
+        # Build a synthetic month, then split into one NetCDF per day —
+        # matching the real CDS delivery layout (a zip containing one .nc
+        # per day, each with a single time step).
+        monthly = _make_synthetic_agera5(
+            var_long_name=long_name, bbox=bbox, year=year, month=month,
         )
-        # AgERA5 always delivers a zip containing exactly one NetCDF.
-        with tempfile.NamedTemporaryFile(suffix=".nc", delete=False) as tmp:
-            ds.to_netcdf(tmp.name)
-            nc_path = Path(tmp.name)
-        try:
+        days = monthrange(year, month)[1]
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            paths: list[Path] = []
+            for d in range(1, days + 1):
+                day_ds = monthly.isel(time=[d - 1])
+                p = tdp / f"agera5_{request['variable']}_{statistic}_{year:04d}{month:02d}{d:02d}.nc"
+                day_ds.to_netcdf(p)
+                paths.append(p)
             with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as zf:
-                zf.write(
-                    nc_path,
-                    arcname=f"agera5_{request['variable']}_{statistic}_"
-                    f"{year:04d}{month:02d}.nc",
-                )
-        finally:
-            nc_path.unlink(missing_ok=True)
+                for p in paths:
+                    zf.write(p, arcname=p.name)
 
 
 @pytest.fixture
