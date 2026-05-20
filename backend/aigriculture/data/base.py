@@ -40,12 +40,15 @@ class Provenance:
     The fingerprint is a stable SHA-256 over the request payload (excluding
     `loaded_at`). Two `Provenance` objects with the same fingerprint describe
     the same logical subset; downstream caches key on the fingerprint.
+
+    For static sources (no time axis — e.g. SoilGrids, DEM) ``time_range``
+    is ``None`` and is serialized as ``null`` in the fingerprint payload.
     """
 
     source_name: str
     source_version: str
     bbox: BBox
-    time_range: TimeRange
+    time_range: TimeRange | None
     variables: tuple[str, ...]
     backend: Backend
     source_url: str
@@ -58,7 +61,11 @@ class Provenance:
             "source_name": self.source_name,
             "source_version": self.source_version,
             "bbox": list(self.bbox),
-            "time_range": [self.time_range[0].isoformat(), self.time_range[1].isoformat()],
+            "time_range": (
+                None
+                if self.time_range is None
+                else [self.time_range[0].isoformat(), self.time_range[1].isoformat()]
+            ),
             "variables": list(self.variables),
         }
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -68,7 +75,11 @@ class Provenance:
         d = asdict(self)
         # asdict() preserves tuple types; emit JSON-friendly lists instead.
         d["bbox"] = list(self.bbox)
-        d["time_range"] = [self.time_range[0].isoformat(), self.time_range[1].isoformat()]
+        d["time_range"] = (
+            None
+            if self.time_range is None
+            else [self.time_range[0].isoformat(), self.time_range[1].isoformat()]
+        )
         d["variables"] = list(self.variables)
         d["loaded_at"] = self.loaded_at.isoformat()
         d["fingerprint"] = self.fingerprint()
@@ -76,7 +87,13 @@ class Provenance:
 
 
 class DataSource(ABC):
-    """Abstract gridded-data source returning `xarray.Dataset`."""
+    """Abstract gridded-data source returning `xarray.Dataset`.
+
+    ``is_static`` distinguishes time-varying sources (AgERA5, CanDCS-M6,
+    Sentinel-2, etc.) from sources without a time axis at our horizons
+    (SoilGrids, DEM, soil-survey polygons). Static sources accept
+    ``time_range=None`` in :meth:`load`.
+    """
 
     name: str
     version: str
@@ -84,6 +101,7 @@ class DataSource(ABC):
     source_url: str
     license: str
     citation_key: str
+    is_static: bool = False
 
     @property
     @abstractmethod
@@ -114,7 +132,7 @@ class DataSource(ABC):
     def load(
         self,
         bbox: BBox,
-        time_range: TimeRange,
+        time_range: TimeRange | None = None,
         variables: Sequence[str] | None = None,
     ) -> xr.Dataset:
         """Return a lazy `xarray.Dataset` for the requested subset.
@@ -122,7 +140,8 @@ class DataSource(ABC):
         Implementations must:
 
         - clip to ``bbox`` in this source's CRS;
-        - slice ``time_range`` inclusively on both ends;
+        - slice ``time_range`` inclusively on both ends (or accept ``None``
+          for sources with ``is_static = True``);
         - default to all `variables` if `None` is passed;
         - return a `Dataset` whose chunks are `dask`-backed when feasible.
         """
@@ -130,7 +149,7 @@ class DataSource(ABC):
     def provenance(
         self,
         bbox: BBox,
-        time_range: TimeRange,
+        time_range: TimeRange | None = None,
         variables: Sequence[str] | None = None,
     ) -> Provenance:
         vars_ = tuple(variables) if variables is not None else self.variables
@@ -154,8 +173,10 @@ def validate_bbox(bbox: BBox) -> None:
         raise ValueError(f"Degenerate bbox: {bbox!r} — require minx<maxx and miny<maxy.")
 
 
-def validate_time_range(time_range: TimeRange) -> None:
-    """Raise `ValueError` if start > end."""
+def validate_time_range(time_range: TimeRange | None) -> None:
+    """Raise `ValueError` if ``start > end``. ``None`` is accepted (for static sources)."""
+    if time_range is None:
+        return
     start, end = time_range
     if start > end:
         raise ValueError(f"time_range start ({start}) is after end ({end}).")

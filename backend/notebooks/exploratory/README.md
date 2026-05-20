@@ -42,3 +42,4 @@ the top.
 | File | Purpose | External deps |
 |------|---------|----------------|
 | `quebec_gdd_smoke_test.py` | First end-to-end exercise of the data layer — pulls AgERA5 for a Quebec sub-region and computes GDD via xclim. | Copernicus CDS API (`~/.cdsapirc`). |
+| `quebec_soil_smoke_test.py` | Streams SoilGrids 2.0 Tier-2 essential properties (clay, sand, silt, pH, SOC, bulk density, coarse fragments) at six depths for a Quebec subset; prints per-(property, depth) summaries; plots the topsoil-clay map. | ISRIC public WebDAV (no auth). |
