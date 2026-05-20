@@ -16,9 +16,11 @@ Run end-to-end as a script:
 Prerequisites:
 
 - A Google Cloud project ID and Earth Engine activation. The script reads
-  the project ID from the ``AIGRICULTURE_EE_PROJECT`` env var. See the
-  walk-through in the project README / session notes for Earth Engine
-  setup steps.
+  the project ID from the ``AIGRICULTURE_EE_PROJECT`` env var. You can
+  either ``export AIGRICULTURE_EE_PROJECT=your-project-id`` in the shell
+  or drop ``AIGRICULTURE_EE_PROJECT=your-project-id`` into a ``.env`` file
+  at the project root — ``python-dotenv`` is loaded at import time so
+  either works.
 - ``earthengine authenticate`` run once interactively to write
   ``~/.config/earthengine/credentials``.
 """
@@ -38,8 +40,12 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from dotenv import load_dotenv
 
 from aigriculture.data.aafc_aci import AAFCACISource
+
+# Load a project-root `.env` if present. Idempotent; harmless when absent.
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 # %% [markdown]
 # ## Configuration
