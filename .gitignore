@@ -29,6 +29,12 @@ htmlcov/
 profile_default/
 ipython_config.py
 
+# Notebook outputs (we keep notebooks as .py + #%% cells; outputs are local artifacts)
+backend/notebooks/exploratory/*.ipynb
+backend/notebooks/exploratory/*.png
+backend/notebooks/exploratory/*.html
+backend/notebooks/exploratory/*.pdf
+
 # ---- Node / Next.js ----
 node_modules/
 .next/
