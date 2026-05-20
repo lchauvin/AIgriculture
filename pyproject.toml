@@ -128,3 +128,4 @@ plugins = []
 testpaths = ["backend/tests"]
 addopts = "-q --strict-markers"
 asyncio_mode = "auto"
+pythonpath = ["backend"]
