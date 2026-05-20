@@ -43,3 +43,4 @@ the top.
 |------|---------|----------------|
 | `quebec_gdd_smoke_test.py` | First end-to-end exercise of the data layer — pulls AgERA5 for a Quebec sub-region and computes GDD via xclim. | Copernicus CDS API (`~/.cdsapirc`). |
 | `quebec_soil_smoke_test.py` | Streams SoilGrids 2.0 Tier-2 essential properties (clay, sand, silt, pH, SOC, bulk density, coarse fragments) at six depths for a Quebec subset; prints per-(property, depth) summaries; plots the topsoil-clay map. | ISRIC public WebDAV (no auth). |
+| `quebec_aci_smoke_test.py` | Streams one year of AAFC Annual Crop Inventory for a Quebec subset via Earth Engine; prints land-cover class histogram and maps the result. | Earth Engine (`earthengine authenticate` once, `AIGRICULTURE_EE_PROJECT` env var set to your GCP project ID). |
