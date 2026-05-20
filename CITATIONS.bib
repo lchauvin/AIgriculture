@@ -126,6 +126,83 @@
   doi          = {10.3390/land11091382},
 }
 
+% --- Climate reanalysis datasets --------------------------------------------
+
+% Verified: https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels
+@misc{Hersbach2023ERA5,
+  author       = {Hersbach, H. and Bell, B. and Berrisford, P. and Biavati, G. and Hor{\'a}nyi, A. and Mu{\~n}oz-Sabater, J. and Nicolas, J. and Peubey, C. and Radu, R. and Rozum, I. and Schepers, D. and Simmons, A. and Soci, C. and Dee, D. and Th{\'e}paut, J.-N.},
+  title        = {{ERA5} hourly data on single levels from 1940 to present},
+  year         = {2023},
+  publisher    = {Copernicus Climate Change Service (C3S) Climate Data Store (CDS)},
+  doi          = {10.24381/cds.adbb2d47},
+  note         = {Dataset; accessed via the {CDS} {API}.},
+}
+
+% Verified: https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land
+@misc{MunozSabater2021ERA5Land,
+  author       = {Mu{\~n}oz-Sabater, Joaqu{\'\i}n},
+  title        = {{ERA5-Land} hourly data from 1950 to present},
+  year         = {2019},
+  publisher    = {Copernicus Climate Change Service (C3S) Climate Data Store (CDS)},
+  doi          = {10.24381/cds.e2161bac},
+  note         = {Dataset; accessed via the {CDS} {API}.},
+}
+
+% Verified: https://cds.climate.copernicus.eu/datasets/sis-agrometeorological-indicators
+@misc{BoogaardAgERA5,
+  author       = {Boogaard, Hendrik and Schubert, Jens and De Wit, Allard and Lazebnik, Joost and Hutjes, Ronald and Van der Grijn, Gerard},
+  title        = {Agrometeorological indicators from 1979 to present derived from reanalysis ({AgERA5})},
+  year         = {2020},
+  publisher    = {Copernicus Climate Change Service (C3S) Climate Data Store (CDS)},
+  doi          = {10.24381/cds.6c68c9bb},
+  note         = {Dataset; accessed via the {CDS} {API}. Author list and exact publication year to be confirmed against the dataset's official documentation during Phase 1.},
+}
+
+% --- Climate projections -----------------------------------------------------
+
+% Verified: https://rmets.onlinelibrary.wiley.com/doi/10.1002/gdj3.257
+@article{Sobie2024CanDCSM6,
+  author       = {Sobie, Stephen R. and Ouali, Dhouha and Curry, Charles L. and Zwiers, Francis W.},
+  title        = {Multivariate Canadian Downscaled Climate Scenarios for {CMIP6} ({CanDCS}-{M6})},
+  journal      = {Geoscience Data Journal},
+  year         = {2024},
+  volume       = {11},
+  pages        = {806--824},
+  doi          = {10.1002/gdj3.257},
+}
+
+% Verified: https://na-cordex.org/ — cite as recommended on the site.
+@misc{Mearns2017NACORDEX,
+  author       = {Mearns, Linda O. and McGinnis, Seth and Korytina, Daria and Arritt, Raymond and Biner, Sebastien and Bukovsky, Melissa and Chang, Hsin-I and Christensen, Ole and Herzmann, Daryl and Jiao, Yanjun and Kharin, Slava and Lazare, Mike and Nikulin, Grigory and Qian, Mingcheng and Scinocca, John and Winger, Katja and Castro, Christopher and Frigon, Anne and Gutowski, William},
+  title        = {The {NA-CORDEX} dataset, version 1.0},
+  year         = {2017},
+  publisher    = {NCAR Climate Data Gateway},
+  doi          = {10.5065/D6SJ1JCH},
+  note         = {Author list to be confirmed against the official citation page.},
+}
+
+% --- Earth-observation datasets ---------------------------------------------
+
+% Verified: https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod13q1-061
+@misc{Didan2021MOD13Q1,
+  author       = {Didan, Kamel},
+  title        = {{MODIS/Terra} Vegetation Indices 16-Day {L3} Global 250m {SIN} Grid {V061}},
+  year         = {2021},
+  publisher    = {NASA Land Processes DAAC},
+  doi          = {10.5067/MODIS/MOD13Q1.061},
+  note         = {Dataset; accessed via NASA Earthdata Cloud.},
+}
+
+% Verified: https://www.earthdata.nasa.gov/data/catalog/lpcloud-vnp13a1-001
+@misc{DidanBarreto2018VNP13A1,
+  author       = {Didan, Kamel and Barreto, Armando},
+  title        = {{VIIRS/NPP} Vegetation Indices 16-Day {L3} Global 500m {SIN} Grid {V001}},
+  year         = {2018},
+  publisher    = {NASA Land Processes DAAC},
+  doi          = {10.5067/VIIRS/VNP13A1.001},
+  note         = {V001 deprecated 8 April 2025; migrate to V002 going forward.},
+}
+
 % =============================================================================
 % TO-VERIFY in Phase 1 (do not cite from any docs/research/*.md until checked):
 % - FAO GAEZ v4 technical documentation, IIASA
