@@ -18,7 +18,9 @@ from rasterio.transform import from_origin
 from aigriculture.data.aafc_aci import (
     AAFCACISource,
     COVERAGE_END_KNOWN,
+    LEGEND,
     _years_in_range,
+    aci_label,
 )
 
 
@@ -184,3 +186,32 @@ def test_provenance_records_landcover(tmp_path: Path, fake_fetcher, small_bbox):
 def test_coverage_end_known_is_a_real_year():
     """Guard against accidental future-dating of the coverage constant."""
     assert COVERAGE_END_KNOWN.year >= 2024
+
+
+def test_legend_contains_quebec_staples():
+    """Codes Quebec MVP cares about most must be present and named correctly."""
+    expected = {
+        20:  "Water",
+        34:  "Urban and Developed",
+        122: "Pasture and Forages",
+        146: "Spring Wheat",
+        147: "Corn for Grain",
+        153: "Canola and Rapeseed",
+        158: "Soybeans",
+        210: "Coniferous",
+        220: "Broadleaf",
+        230: "Mixedwood",
+    }
+    for code, name in expected.items():
+        assert LEGEND[code] == name, f"legend code {code}: {LEGEND[code]!r} != {name!r}"
+
+
+def test_aci_label_unknown_code_returns_fallback():
+    label = aci_label(99999)
+    assert label.startswith("Unknown")
+    assert "99999" in label
+
+
+def test_aci_label_known_code():
+    assert aci_label(147) == "Corn for Grain"
+    assert aci_label(158) == "Soybeans"

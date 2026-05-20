@@ -42,7 +42,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from dotenv import load_dotenv
 
-from aigriculture.data.aafc_aci import AAFCACISource
+from aigriculture.data.aafc_aci import AAFCACISource, aci_label
 
 # Load a project-root `.env` if present. Idempotent; harmless when absent.
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
@@ -85,35 +85,25 @@ print(ds)
 # %% [markdown]
 # ## Class-code histogram
 #
-# ACI codes (subset relevant to Quebec, full legend on the EE catalog):
-# - 20  Water
-# - 30  Exposed Land / Barren
-# - 34  Urban
-# - 50  Shrubland
-# - 110 Grassland
-# - 122 Pasture
-# - 130 Too Wet to Be Seeded
-# - 140 Fallow / Idle
-# - 145 Forage
-# - 146 Mixed Forage / Hay
-# - 153 Corn
-# - 155 Soybean
-# - 158 Wheat / Spring Wheat
-# - 160 Barley
-# - 162 Canola
-# - 230 Wetland
-# - 200/210/220 Forest types
-# - 50/51 etc.
+# Class names from ``aigriculture.data.aafc_aci.aci_label``. The full
+# legend lives in the ``LEGEND`` dict beside it.
 
 # %%
-arr = ds["landcover"].isel(time=0).values.astype("int64")
-arr = arr[arr != 0]  # mask out 0 / nodata
+arr = ds["landcover"].isel(time=0).values
+# AAFC ACI is an integer raster but the EE-resampled GeoTIFF arrives as
+# float32 with NaN for out-of-coverage pixels. Drop NaNs *before* casting
+# to int — a direct ``float → int64`` cast on NaN produces int64.min and
+# pollutes the histogram with a phantom class at -9223372036854775808.
+arr = arr[np.isfinite(arr)].astype("int64")
+arr = arr[arr != 0]  # also drop explicit 0 / nodata
 codes, counts = np.unique(arr, return_counts=True)
 total = counts.sum()
 print(f"\nUnique classes: {len(codes)}, total valid pixels: {total:,}")
-print(f"\n{'code':>5}  {'count':>10}  {'pct':>6}")
+print(f"\n{'code':>5}  {'count':>12}  {'pct':>6}  class")
 for c, n in sorted(zip(codes, counts), key=lambda kv: -kv[1])[:20]:
-    print(f"  {int(c):>3}  {int(n):>10,}  {100 * n / total:>5.2f}%")
+    print(
+        f"  {int(c):>3}  {int(n):>12,}  {100 * n / total:>5.2f}%  {aci_label(int(c))}"
+    )
 
 # %% [markdown]
 # ## Plot the land-cover map

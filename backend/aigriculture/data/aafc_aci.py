@@ -261,9 +261,107 @@ def _stream_url_to_path(url: str, dest: Path) -> None:
             f.write(chunk)
 
 
+# ---- Class legend -----------------------------------------------------------
+#
+# Canonical AAFC ACI land-cover class codes and labels, as published on the
+# Earth Engine catalogue page for AAFC/ACI. Not exhaustive — extended each
+# season as AAFC publishes new codes; current set covers everything observed
+# in Quebec circa 2009–2024 and is the de-facto reference for our pipeline.
+# Use ``aci_label(code)`` to look one up.
+
+LEGEND: dict[int, str] = {
+    10:  "Cloud / No Data",
+    20:  "Water",
+    30:  "Exposed Land and Barren",
+    34:  "Urban and Developed",
+    35:  "Greenhouses",
+    50:  "Shrubland",
+    60:  "Wetland — Treed",
+    80:  "Wetland",
+    85:  "Wetland — Vegetation",
+    110: "Grassland",
+    120: "Agriculture (undifferentiated)",
+    121: "Agriculture — Pasture",
+    122: "Pasture and Forages",
+    130: "Too Wet to be Seeded",
+    131: "Fallow",
+    132: "Cereals",
+    133: "Barley",
+    134: "Other Grains",
+    135: "Millet",
+    136: "Oats",
+    137: "Rye",
+    138: "Spelt",
+    139: "Triticale",
+    140: "Wheat",
+    141: "Switchgrass",
+    142: "Sorghum",
+    143: "Quinoa",
+    145: "Winter Wheat",
+    146: "Spring Wheat",
+    147: "Corn for Grain",
+    148: "Tobacco",
+    149: "Ginseng",
+    150: "Oilseeds",
+    151: "Borage",
+    152: "Camelina",
+    153: "Canola and Rapeseed",
+    154: "Flaxseed",
+    155: "Mustard",
+    156: "Safflower",
+    157: "Sunflower",
+    158: "Soybeans",
+    159: "Pulses",
+    160: "Other Pulses",
+    161: "Chickpeas",
+    162: "Peas",
+    163: "Lentils",
+    167: "Beans",
+    168: "Buckwheat",
+    174: "Cranberry",
+    175: "Blueberry",
+    176: "Strawberry",
+    177: "Tomatoes",
+    178: "Other Berries",
+    179: "Other Vegetables",
+    180: "Herbs",
+    181: "Other Crops",
+    182: "Mixedwood",  # historic; see also 230
+    183: "Asparagus",
+    185: "Other Vegetables",
+    188: "Onions",
+    189: "Peppers",
+    190: "Orchards",
+    191: "Other Fruits",
+    192: "Apples",
+    193: "Stone Fruits",
+    194: "Cherries",
+    195: "Peaches",
+    196: "Grapes",
+    197: "Other Tree Fruits",
+    198: "Vineyards",
+    199: "Hops",
+    200: "Forest (undifferentiated)",
+    210: "Coniferous",
+    220: "Broadleaf",
+    230: "Mixedwood",
+}
+
+
+def aci_label(code: int) -> str:
+    """Return the human-readable name for an ACI class code.
+
+    Unknown codes return ``"Unknown (code=<n>)"`` so a partial legend does
+    not break downstream code.
+    """
+    return LEGEND.get(int(code), f"Unknown (code={int(code)})")
+
+
 __all__ = [
     "AAFCACISource",
     "COVERAGE_END_KNOWN",
     "COVERAGE_START",
     "EE_COLLECTION",
+    "LEGEND",
+    "aci_label",
 ]
