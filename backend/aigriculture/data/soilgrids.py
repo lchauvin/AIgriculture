@@ -26,6 +26,15 @@ required, no rate limit publicly documented but the FAQ requests
 The native CRS is **Goode Homolosine on WGS 84** (``ESRI:54052``). We
 reproject every load to ``EPSG:4326`` on the client so SoilGrids lines
 up with AgERA5 and the rest of the pipeline.
+
+Performance note
+----------------
+The native 250 m VRTs are large (multi-MB XML referencing thousands of
+tiles); a full 7-property × 6-depth fetch for a 1° × 1° bbox can take
+10–20 minutes on the first call. ISRIC also publishes a 1 km aggregated
+single-COG tier at ``data_aggregated/1000m/<prop>/<prop>_<depth>_mean_1000.tif``
+that is plenty for our 10 km climate-driver pipeline. Switching the
+default to that tier is a planned optimization tracked separately.
 """
 
 from __future__ import annotations
