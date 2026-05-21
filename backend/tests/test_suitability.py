@@ -225,20 +225,70 @@ def test_trapezoid_at_known_points():
     np.testing.assert_allclose(score.values, expected)
 
 
+def test_triangle_at_known_points():
+    """Triangle peaks at preferred and decays linearly to the bounds."""
+    x = xr.DataArray(np.array([-1.0, 0.0, 5.0, 15.0, 20.0, 25.0, 30.0, 31.0]))
+    score = envelope.triangle(x, absolute_min=0.0, preferred=20.0, absolute_max=30.0)
+    expected = [
+        0.0,   # below abs_min
+        0.0,   # at abs_min
+        0.25,  # halfway up the left ramp (x=5 out of 20)
+        0.75,  # 3/4 of the way up (x=15)
+        1.0,   # at preferred
+        0.5,   # halfway down the right ramp (x=25 → (30-25)/10)
+        0.0,   # at abs_max
+        0.0,   # above abs_max
+    ]
+    np.testing.assert_allclose(score.values, expected)
+
+
+def test_triangle_rejects_preferred_outside_bounds():
+    x = xr.DataArray(np.array([0.0, 1.0]))
+    with pytest.raises(ValueError, match="preferred"):
+        envelope.triangle(x, absolute_min=0.0, preferred=10.0, absolute_max=5.0)
+
+
 def test_score_crop_perfect_conditions_for_corn():
-    """Hand-pick indicators in the optimal window for corn → score == 1."""
+    """Pin indicators at the corn preference optima → envelope, preference,
+    and combined score all == 1.0."""
     cat = requirements.load_catalogue()
     corn = cat.by_id("corn_grain")
+    p = corn.preference
+    assert p is not None
     ind = xr.Dataset(
         {
-            "tmean_growing_c": xr.DataArray([[22.0]], dims=("y", "x")),
-            "gdd": xr.DataArray([[1200.0]], dims=("y", "x")),
-            "annual_precip_mm": xr.DataArray([[800.0]], dims=("y", "x")),
+            "tmean_growing_c": xr.DataArray([[p.tmean_preferred_c]], dims=("y", "x")),
+            "gdd": xr.DataArray([[p.gdd_preferred]], dims=("y", "x")),
+            "annual_precip_mm": xr.DataArray([[p.annual_precip_preferred_mm]], dims=("y", "x")),
             "growing_season_days": xr.DataArray([[200.0]], dims=("y", "x")),
         }
     )
     res = envelope.score_crop(ind, corn)
+    assert float(res.envelope_score.values[0, 0]) == pytest.approx(1.0)
+    assert float(res.preference_score.values[0, 0]) == pytest.approx(1.0)
     assert float(res.score.values[0, 0]) == pytest.approx(1.0)
+
+
+def test_preference_score_below_envelope_when_offset_from_optimum():
+    """Inputs sit inside the envelope but away from the preference peak
+    → envelope == 1.0 but combined < 1.0."""
+    cat = requirements.load_catalogue()
+    corn = cat.by_id("corn_grain")
+    # T 16 °C is in corn's envelope (14-33) but well off its 22 °C peak.
+    # GDD 1100 is in the envelope (1000-2700) but off its 1400 peak.
+    ind = xr.Dataset(
+        {
+            "tmean_growing_c": xr.DataArray([[16.0]], dims=("y", "x")),
+            "gdd": xr.DataArray([[1100.0]], dims=("y", "x")),
+            "annual_precip_mm": xr.DataArray([[700.0]], dims=("y", "x")),  # at preference
+            "growing_season_days": xr.DataArray([[200.0]], dims=("y", "x")),
+        }
+    )
+    res = envelope.score_crop(ind, corn)
+    assert float(res.envelope_score.values[0, 0]) == pytest.approx(1.0)
+    assert float(res.preference_score.values[0, 0]) < 1.0
+    # Combined < envelope.
+    assert float(res.score.values[0, 0]) < float(res.envelope_score.values[0, 0])
 
 
 def test_score_crop_outside_temperature_window_zero():

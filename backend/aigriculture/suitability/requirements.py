@@ -211,6 +211,26 @@ class FrostTolerance(BaseModel):
     reduced_growth_temperature_c: float | None = None
 
 
+class Preference(BaseModel):
+    """Single-point preferred values per factor.
+
+    The trapezoid bounds on each ``TemperatureRequirements`` /
+    ``GddRequirements`` / etc. describe the *envelope* (where the crop
+    can survive). The optima below describe *where the crop performs
+    best* — a single peak inside that envelope. The two together define
+    a triangular preference-score that peaks at the optimum and decays
+    linearly to the envelope edges, used to rank crops that all sit
+    inside their envelopes (see envelope.triangle).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tmean_preferred_c: float
+    gdd_preferred: float
+    annual_precip_preferred_mm: float
+    ph_preferred: float | None = None
+
+
 class Citation(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -239,6 +259,7 @@ class CropRequirements(BaseModel):
     soil: SoilRequirements
     growing_season: GrowingSeason
     frost: FrostTolerance
+    preference: Preference | None = None
     photoperiod: Literal["short_day", "long_day", "neutral"] | None = None
 
     citations: list[Citation]
@@ -291,6 +312,7 @@ __all__ = [
     "FrostTolerance",
     "GddRequirements",
     "GrowingSeason",
+    "Preference",
     "PrecipitationRequirements",
     "SoilRequirements",
     "TemperatureRequirements",

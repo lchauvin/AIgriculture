@@ -33,7 +33,7 @@ from typing import Iterable
 import numpy as np
 import xarray as xr
 
-from .requirements import CropRequirements, TrapezoidBounds
+from .requirements import CropRequirements, Preference, TrapezoidBounds
 
 
 # GAEZ-v4-style breakpoints for the discrete classes.
@@ -74,28 +74,72 @@ def trapezoid(da: xr.DataArray, bounds: TrapezoidBounds) -> xr.DataArray:
     return score
 
 
+def triangle(
+    da: xr.DataArray,
+    *,
+    absolute_min: float,
+    preferred: float,
+    absolute_max: float,
+) -> xr.DataArray:
+    """Triangular preference ∈ [0, 1].
+
+    ::
+
+        score
+          1 |       /\\
+            |      /  \\
+            |     /    \\
+          0 |____/      \\____
+                a   p      d
+                |   |      |
+              abs  pre    abs
+              min  ferred max
+
+    Peaks at ``preferred``; decays linearly to 0 at ``absolute_min`` and
+    ``absolute_max``. Used alongside the trapezoidal envelope to
+    discriminate among crops that all sit inside their envelopes — the
+    triangle says "how close to peak performance is the cell", while
+    the trapezoid says "does the cell sit inside the survival envelope
+    at all".
+    """
+    if not (absolute_min <= preferred <= absolute_max):
+        raise ValueError(
+            f"preferred ({preferred}) must lie in [absolute_min, absolute_max] "
+            f"= [{absolute_min}, {absolute_max}]"
+        )
+    left = (da - absolute_min) / max(preferred - absolute_min, 1e-9)
+    right = (absolute_max - da) / max(absolute_max - preferred, 1e-9)
+    raw = xr.where(da.isnull(), np.nan, np.minimum(left, right))
+    return raw.clip(0, 1)
+
+
 @dataclass(frozen=True, slots=True)
 class CropSuitability:
     """Result of scoring one crop over one indicator field.
 
-    Attributes
-    ----------
-    crop_id
-        The crop's ``id`` from the catalogue.
-    score
-        Continuous suitability ∈ [0, 1] with the same horizontal dims
-        as the input indicators.
-    per_factor
-        Per-factor sub-scores, keyed by factor name. The crop's
-        overall ``score`` is the elementwise minimum of these.
-    limiting_factor
-        Name of the factor with the lowest sub-score at each cell
-        (string DataArray).
+    The overall ``score`` is ``envelope_score × preference_score`` —
+    the most useful default for ranking crops within a region:
+
+    - ``envelope_score`` (trapezoidal, Liebig minimum across factors)
+      answers *"is the cell inside the crop's survival envelope?"*.
+      ``classify_gaez(envelope_score)`` gives the S1/S2/S3/S4/N class.
+    - ``preference_score`` (triangular, geometric mean across factors)
+      answers *"how close to peak performance is the cell within the
+      envelope?"*. Discriminates among crops that all sit on the
+      envelope plateau.
+
+    Crops that lack a ``preference`` block in the YAML get a
+    ``preference_score`` of 1.0 everywhere (no within-envelope
+    differentiation), so the combined score falls back to the
+    envelope semantics.
     """
 
     crop_id: str
     score: xr.DataArray
+    envelope_score: xr.DataArray
+    preference_score: xr.DataArray
     per_factor: dict[str, xr.DataArray]
+    per_factor_preference: dict[str, xr.DataArray]
     limiting_factor: xr.DataArray
 
 
@@ -175,10 +219,54 @@ def score_crop(
     # meaningless — wipe it out so downstream UIs don't display a stale label.
     limiting_factor = limiting_factor.where(~score.isnull(), "")
 
+    # ---- preference (triangular) -----------------------------------------
+    per_factor_pref: dict[str, xr.DataArray] = {}
+    if crop.preference is not None:
+        per_factor_pref["temperature"] = triangle(
+            indicators["tmean_growing_c"],
+            absolute_min=crop.temperature.tmean_absolute_min_c,
+            preferred=crop.preference.tmean_preferred_c,
+            absolute_max=crop.temperature.tmean_absolute_max_c,
+        )
+        per_factor_pref["gdd"] = triangle(
+            indicators["gdd"],
+            absolute_min=crop.gdd.absolute_min,
+            preferred=crop.preference.gdd_preferred,
+            absolute_max=crop.gdd.absolute_max,
+        )
+        per_factor_pref["precipitation"] = triangle(
+            indicators["annual_precip_mm"],
+            absolute_min=crop.precipitation.annual_absolute_min_mm,
+            preferred=crop.preference.annual_precip_preferred_mm,
+            absolute_max=crop.precipitation.annual_absolute_max_mm,
+        )
+        if soil_ph is not None and crop.preference.ph_preferred is not None:
+            per_factor_pref["soil_ph"] = triangle(
+                soil_ph,
+                absolute_min=crop.soil.ph_absolute_min,
+                preferred=crop.preference.ph_preferred,
+                absolute_max=crop.soil.ph_absolute_max,
+            )
+        # Geometric mean across factors keeps the score sensitive to any
+        # single factor being far from its peak (no plateau-style
+        # masking) while staying bounded in [0, 1].
+        pref_stack = xr.concat(
+            [per_factor_pref[f].expand_dims(factor=[f]) for f in per_factor_pref],
+            dim="factor",
+        )
+        preference_score = pref_stack.prod(dim="factor") ** (1.0 / len(per_factor_pref))
+    else:
+        preference_score = xr.ones_like(score)
+
+    combined = score * preference_score
+
     return CropSuitability(
         crop_id=crop.id,
-        score=score,
+        score=combined,
+        envelope_score=score,
+        preference_score=preference_score,
         per_factor=per_factor,
+        per_factor_preference=per_factor_pref,
         limiting_factor=limiting_factor,
     )
 
@@ -218,4 +306,5 @@ __all__ = [
     "rank_crops",
     "score_crop",
     "trapezoid",
+    "triangle",
 ]

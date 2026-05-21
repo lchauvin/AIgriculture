@@ -156,8 +156,8 @@ print(f"Future Dataset (Apr–Sep slice): time={future_ds.sizes['time']} days, "
 def score_all_crops(ds: xr.Dataset, label: str) -> dict[str, envelope.CropSuitability]:
     print(f"\n--- scoring {label} ---")
     print(
-        f"  {'crop':>14s}  {'score':>6}  {'class':>5}  "
-        f"{'limiting':>14s}  per-factor (T/GDD/Pr/GS)"
+        f"  {'crop':>14s}  {'envel':>6}  {'pref':>6}  {'combo':>6}  "
+        f"{'class':>5}  {'limiting':>14s}  per-factor envelope (T/GDD/Pr/GS)"
     )
     results = {}
     for crop in catalogue.crops:
@@ -165,19 +165,21 @@ def score_all_crops(ds: xr.Dataset, label: str) -> dict[str, envelope.CropSuitab
         sui = envelope.score_crop(ind, crop)
         results[crop.id] = sui
 
-        score = float(sui.score.mean().values)
-        cls = envelope.classify_gaez(xr.DataArray(score)).item()
+        env = float(sui.envelope_score.mean().values)
+        pref = float(sui.preference_score.mean().values)
+        combo = float(sui.score.mean().values)
+        # Envelope-based class (preserves GAEZ S1-S4-N semantics).
+        cls = envelope.classify_gaez(xr.DataArray(env)).item()
 
-        # Which factor is the modal limiter across the cells?
+        # Modal limiting factor (from envelope).
         flat = sui.limiting_factor.values.flatten()
-        flat = flat[flat != ""]  # drop no-data cells
+        flat = flat[flat != ""]
         if len(flat):
             unique, counts = np.unique(flat, return_counts=True)
             modal_limit = unique[counts.argmax()]
         else:
             modal_limit = "—"
 
-        # Region-mean of each sub-score, for the diagnostic.
         per = {k: float(v.mean().values) for k, v in sui.per_factor.items()}
         per_str = (
             f"T={per.get('temperature', 0):.2f} "
@@ -186,8 +188,8 @@ def score_all_crops(ds: xr.Dataset, label: str) -> dict[str, envelope.CropSuitab
             f"GS={per.get('growing_season', 0):.2f}"
         )
         print(
-            f"  {crop.id:>14s}  {score:>6.3f}  {cls:>5}  "
-            f"{modal_limit:>14s}  {per_str}"
+            f"  {crop.id:>14s}  {env:>6.3f}  {pref:>6.3f}  {combo:>6.3f}  "
+            f"{cls:>5}  {modal_limit:>14s}  {per_str}"
         )
     return results
 

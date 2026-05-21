@@ -113,6 +113,16 @@ crops:
       # killed by any sub-zero temperature once emerged.
       kill_temperature_c: 0.0
 
+    preference:
+      # Peak-performance optima (used for within-envelope ranking).
+      # Corn yields are typically maximized at growing-season mean ~22 °C
+      # (US Corn Belt summer), GDD ~1400 base 10 °C (Quebec full-MG
+      # cultivar potential), ~700 mm annual precipitation, pH ~6.5.
+      tmean_preferred_c: 22.0
+      gdd_preferred: 1400
+      annual_precip_preferred_mm: 700
+      ph_preferred: 6.5
+
     citations:
       - source: FAO ECOCROP
         ecoport_code: 2175
@@ -182,6 +192,15 @@ crops:
     # the long summer days at Quebec latitudes. This file does not yet
     # encode MG-specific behaviour; revisit when we add cultivar modeling.
 
+    preference:
+      # Soy peaks at warmer growing-season Tmean than corn (~24 °C, Iowa
+      # summer reference) and benefits from more water (~800 mm).
+      # GDD optimum 1200 base 10 °C is mid-MG-I Quebec sweet spot.
+      tmean_preferred_c: 24.0
+      gdd_preferred: 1200
+      annual_precip_preferred_mm: 800
+      ph_preferred: 6.2
+
     citations:
       - source: FAO ECOCROP
         ecoport_code: 1150
@@ -245,6 +264,16 @@ crops:
       kill_temperature_c: 0.0
       reduced_growth_temperature_c: -20.0
 
+    preference:
+      # Spring wheat is cool-season; peak performance at Tmean ~18 °C
+      # (cool-temperate summer). GDD optimum 2200 base 0 °C — comfortable
+      # cycle margin in Quebec. Precip ~700 mm matches the agronomic
+      # mid-range.
+      tmean_preferred_c: 18.0
+      gdd_preferred: 2200
+      annual_precip_preferred_mm: 700
+      ph_preferred: 6.5
+
     citations:
       - source: FAO ECOCROP
         ecoport_code: 2114
@@ -304,6 +333,16 @@ crops:
       # the seedling stage.
       kill_temperature_c: -6.0
       reduced_growth_temperature_c: -15.0
+
+    preference:
+      # Canola is cool-season (Brassica), peak at Tmean ~18 °C; flowering
+      # impaired above 27 °C. GDD optimum 1700 base 5 °C — cycle
+      # complete with margin. ~600 mm precip is the AAFC Prairie /
+      # Quebec target.
+      tmean_preferred_c: 18.0
+      gdd_preferred: 1700
+      annual_precip_preferred_mm: 600
+      ph_preferred: 7.0
 
     citations:
       - source: FAO ECOCROP
