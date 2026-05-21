@@ -1,0 +1,246 @@
+# Quebec MVP pilot-crop environmental requirements
+# ==================================================
+#
+# Hand-curated requirements for the four crops AIgriculture targets first
+# (per ADR 0003 / docs/research/02-crop-knowledge-base.md Part C).
+#
+# Primary source for every parameter is the **FAO ECOCROP** database
+# (officially frozen ~2015), accessed via the OpenCLIM/ecocrop public
+# CSV mirror — itself published under Open Government Licence 3.0
+# (https://github.com/OpenCLIM/ecocrop, EcoCrop_DB.csv). Each crop's
+# `ecoport_code` is the EcoPortCode in that CSV, which is the canonical
+# FAO ECOCROP species ID.
+#
+# Where ECOCROP lacks a parameter we need (e.g. growing-degree-day
+# requirements, Quebec-cultivar specifics), we add an explicitly cited
+# secondary source.
+#
+# Schema is documented in aigriculture.suitability.requirements.
+# Lat ranges from ECOCROP are *not* used as a hard filter — modern
+# cultivars have moved past the published bounds (e.g. soybean LATMN 47
+# in ECOCROP, yet Quebec at 45-46°N grows ~1.4 Mt/yr).
+
+schema_version: 1
+
+crops:
+  # ----- Corn (grain maize) -----------------------------------------------
+  - id: corn_grain
+    scientific_name: Zea mays
+    common_name_en: Corn for Grain
+    common_name_fr: Maïs-grain
+    ecoport_code: 2175
+    aci_code: 147  # AAFC ACI legend
+
+    temperature:
+      tmean_absolute_min_c: 10.0   # ECOCROP TMIN
+      tmean_optimal_min_c: 18.0    # ECOCROP TOPMN
+      tmean_optimal_max_c: 33.0    # ECOCROP TOPMX
+      tmean_absolute_max_c: 47.0   # ECOCROP TMAX
+
+    gdd:
+      # Standard for grain corn in temperate climates; cultivar-dependent
+      # at the optimum. Quebec uses Corn Heat Units (CHU) operationally;
+      # GDD base 10 °C is the international convention.
+      base_temperature_c: 10.0
+      absolute_min: 1100
+      optimal_min: 1500
+      optimal_max: 2700
+      absolute_max: 3500
+
+    precipitation:
+      annual_absolute_min_mm: 400   # ECOCROP RMIN
+      annual_optimal_min_mm: 600    # ECOCROP ROPMN
+      annual_optimal_max_mm: 1200   # ECOCROP ROPMX
+      annual_absolute_max_mm: 1800  # ECOCROP RMAX
+
+    soil:
+      ph_absolute_min: 4.5    # ECOCROP PHMIN
+      ph_optimal_min: 5.0     # ECOCROP PHOPMN
+      ph_optimal_max: 7.0     # ECOCROP PHOPMX
+      ph_absolute_max: 8.5    # ECOCROP PHMAX
+
+    growing_season:
+      cycle_min_days: 65    # ECOCROP GMIN
+      cycle_max_days: 365   # ECOCROP GMAX (broad, includes tropical multi-crop)
+
+    frost:
+      # Corn has effectively no frost tolerance during the growing season —
+      # ECOCROP doesn't list a KTMP but agronomic consensus is the crop is
+      # killed by any sub-zero temperature once emerged.
+      kill_temperature_c: 0.0
+
+    citations:
+      - source: FAO ECOCROP
+        ecoport_code: 2175
+        accessed_via: "OpenCLIM/ecocrop EcoCrop_DB.csv (OGL 3.0)"
+        accessed_url: "https://github.com/OpenCLIM/ecocrop"
+        applies_to: [temperature, precipitation, soil, growing_season]
+      - source: "Neild & Newman (1990), NebGuide G90-998 — Growing season characteristics and corn maturation"
+        applies_to: [gdd]
+      - source: "Bootsma et al. (2005), Can. J. Soil Sci. 85:1–18 — Risk assessment of corn and soybean production in eastern Canada"
+        applies_to: [gdd]
+
+  # ----- Soybean ----------------------------------------------------------
+  - id: soybean
+    scientific_name: Glycine max
+    common_name_en: Soybeans
+    common_name_fr: Soja
+    ecoport_code: 1150
+    aci_code: 158
+
+    temperature:
+      tmean_absolute_min_c: 10.0   # ECOCROP TMIN
+      tmean_optimal_min_c: 20.0    # ECOCROP TOPMN
+      tmean_optimal_max_c: 33.0    # ECOCROP TOPMX
+      tmean_absolute_max_c: 38.0   # ECOCROP TMAX
+
+    gdd:
+      base_temperature_c: 10.0
+      absolute_min: 1800
+      optimal_min: 2400
+      optimal_max: 2800
+      absolute_max: 3500
+
+    precipitation:
+      annual_absolute_min_mm: 450   # ECOCROP
+      annual_optimal_min_mm: 600
+      annual_optimal_max_mm: 1500
+      annual_absolute_max_mm: 1800
+
+    soil:
+      ph_absolute_min: 4.5
+      ph_optimal_min: 5.5
+      ph_optimal_max: 6.5
+      ph_absolute_max: 8.4
+
+    growing_season:
+      cycle_min_days: 75
+      cycle_max_days: 180
+
+    frost:
+      kill_temperature_c: 0.0
+
+    photoperiod: short_day  # ECOCROP PHOTO: short day (<12 hours).
+    # Note: cultivar Maturity Groups (MG) 00, 0, I are bred to perform under
+    # the long summer days at Quebec latitudes. This file does not yet
+    # encode MG-specific behaviour; revisit when we add cultivar modeling.
+
+    citations:
+      - source: FAO ECOCROP
+        ecoport_code: 1150
+        accessed_via: "OpenCLIM/ecocrop EcoCrop_DB.csv (OGL 3.0)"
+        accessed_url: "https://github.com/OpenCLIM/ecocrop"
+        applies_to: [temperature, precipitation, soil, growing_season, photoperiod]
+      - source: "Bootsma et al. (2005), Can. J. Soil Sci. 85:1–18"
+        applies_to: [gdd]
+
+  # ----- Spring wheat -----------------------------------------------------
+  - id: spring_wheat
+    scientific_name: Triticum aestivum
+    common_name_en: Spring Wheat
+    common_name_fr: Blé de printemps
+    ecoport_code: 2114
+    aci_code: 146  # AAFC ACI: Spring Wheat
+    # ECOCROP entry covers wheat generically (winter + spring); the values
+    # below apply to spring-sown bread wheat as grown in Quebec/Prairies.
+
+    temperature:
+      tmean_absolute_min_c: 5.0    # ECOCROP TMIN
+      tmean_optimal_min_c: 15.0    # ECOCROP TOPMN
+      tmean_optimal_max_c: 23.0    # ECOCROP TOPMX
+      tmean_absolute_max_c: 27.0   # ECOCROP TMAX
+
+    gdd:
+      base_temperature_c: 0.0    # Wheat tradition base T (international)
+      absolute_min: 1100
+      optimal_min: 1400
+      optimal_max: 1900
+      absolute_max: 2500
+
+    precipitation:
+      annual_absolute_min_mm: 300
+      annual_optimal_min_mm: 750
+      annual_optimal_max_mm: 900
+      annual_absolute_max_mm: 1600
+
+    soil:
+      ph_absolute_min: 5.5
+      ph_optimal_min: 6.0
+      ph_optimal_max: 7.0
+      ph_absolute_max: 8.5
+
+    growing_season:
+      cycle_min_days: 90
+      cycle_max_days: 250
+
+    frost:
+      # Spring wheat is the most frost-tolerant of our four pilot crops.
+      # ECOCROP KTMP=0 (kill); KTMPR=-20 (reduced growth tolerance).
+      kill_temperature_c: 0.0
+      reduced_growth_temperature_c: -20.0
+
+    citations:
+      - source: FAO ECOCROP
+        ecoport_code: 2114
+        accessed_via: "OpenCLIM/ecocrop EcoCrop_DB.csv (OGL 3.0)"
+        accessed_url: "https://github.com/OpenCLIM/ecocrop"
+        applies_to: [temperature, precipitation, soil, growing_season, frost]
+      - source: "McMaster & Wilhelm (1997), Agric. For. Meteorol. 87:291–300 — Growing degree-days: one equation, two interpretations"
+        applies_to: [gdd]
+      - source: "Saiyed et al. (2009), Can. J. Plant Sci. 89:429–439 — Quebec spring wheat heat unit accumulation"
+        applies_to: [gdd]
+
+  # ----- Canola (oilseed rape) -------------------------------------------
+  - id: canola
+    scientific_name: Brassica napus
+    common_name_en: Canola
+    common_name_fr: Canola
+    ecoport_code: 549
+    aci_code: 153  # AAFC ACI: Canola and Rapeseed
+
+    temperature:
+      tmean_absolute_min_c: 5.0    # ECOCROP TMIN
+      tmean_optimal_min_c: 15.0    # ECOCROP TOPMN
+      tmean_optimal_max_c: 25.0    # ECOCROP TOPMX
+      tmean_absolute_max_c: 41.0   # ECOCROP TMAX
+
+    gdd:
+      # Spring canola; base 5 °C is the AAFC convention.
+      base_temperature_c: 5.0
+      absolute_min: 1100
+      optimal_min: 1400
+      optimal_max: 1800
+      absolute_max: 2200
+
+    precipitation:
+      annual_absolute_min_mm: 400
+      annual_optimal_min_mm: 500
+      annual_optimal_max_mm: 1000
+      annual_absolute_max_mm: 2800
+
+    soil:
+      ph_absolute_min: 5.5
+      ph_optimal_min: 6.5
+      ph_optimal_max: 7.6
+      ph_absolute_max: 8.0
+
+    growing_season:
+      cycle_min_days: 85
+      cycle_max_days: 340
+
+    frost:
+      # ECOCROP KTMP=-6 (kill); KTMPR=-15 (reduced-growth tolerance).
+      # Canola is the most frost-tolerant of our four pilot crops at
+      # the seedling stage.
+      kill_temperature_c: -6.0
+      reduced_growth_temperature_c: -15.0
+
+    citations:
+      - source: FAO ECOCROP
+        ecoport_code: 549
+        accessed_via: "OpenCLIM/ecocrop EcoCrop_DB.csv (OGL 3.0)"
+        accessed_url: "https://github.com/OpenCLIM/ecocrop"
+        applies_to: [temperature, precipitation, soil, growing_season, frost]
+      - source: "Canola Council of Canada (2023), Canola Encyclopedia — Growth and development"
+        accessed_url: "https://www.canolacouncil.org/canola-encyclopedia/"
+        applies_to: [gdd]
