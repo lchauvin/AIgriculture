@@ -128,8 +128,21 @@ export default function Home() {
         </p>
       </header>
 
-      <div className="grid flex-1 grid-cols-[400px_1fr] overflow-hidden">
-        <aside className="flex flex-col gap-5 overflow-y-auto border-r border-slate-700 bg-slate-900 p-6">
+      <div className="flex flex-1 overflow-hidden">
+        <aside
+          // CSS-native horizontal resize handle (corner of the aside).
+          // ``minWidth`` keeps the form usable; ``maxWidth`` keeps the
+          // map visible. MapLibre's ResizeObserver picks up the change
+          // and re-fits the canvas automatically.
+          style={{
+            resize: "horizontal",
+            overflow: "auto",
+            width: 420,
+            minWidth: 320,
+            maxWidth: 720,
+          }}
+          className="flex flex-col gap-5 border-r border-slate-700 bg-slate-900 p-6"
+        >
           <ConnectionBadge health={health} error={healthError} />
 
           <section className="flex flex-col gap-3">
@@ -175,7 +188,7 @@ export default function Home() {
           )}
         </aside>
 
-        <section className="relative">
+        <section className="relative flex-1">
           <MapView bbox={displayBbox} gridOverlay={selectedGrid} />
         </section>
       </div>
