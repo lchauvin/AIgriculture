@@ -52,6 +52,7 @@ geo = [
     "xclim>=0.48",
     "regionmask>=0.11",
     "earthengine-api>=0.1.400",
+    "contextily>=1.5",
 ]
 
 # Crop modeling.

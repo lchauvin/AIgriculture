@@ -38,6 +38,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+import contextily as cx
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
@@ -189,14 +190,22 @@ future_scores = score_all_crops(future_ds, f"future ({FUTURE_GCM} {FUTURE_SSP})"
 
 
 # %% [markdown]
-# ## Plot a 4-crop × 2-period suitability grid
+# ## Plot a 4-crop × 2-period suitability grid, on Esri World Imagery
+#
+# `contextily` fetches Web-Mercator basemap tiles and reprojects them to
+# our axes' CRS (EPSG:4326). Tiles are cached locally after first use, so
+# subsequent runs are fast. Suitability data overlays at α=0.55 so the
+# underlying landscape (rivers, urban areas, agricultural lots) shows
+# through.
 
 # %%
 fig, axes = plt.subplots(
     nrows=2, ncols=len(catalogue.crops),
-    figsize=(4 * len(catalogue.crops), 7),
+    figsize=(5 * len(catalogue.crops), 4.5 * 2),
     sharex=True, sharey=True,
 )
+
+minx, miny, maxx, maxy = QUEBEC_BBOX
 
 for col, crop in enumerate(catalogue.crops):
     for row, (period, results) in enumerate(
@@ -204,19 +213,40 @@ for col, crop in enumerate(catalogue.crops):
     ):
         ax = axes[row, col]
         sui = results[crop.id]
-        sui.score.plot.pcolormesh(
+        im = sui.score.plot.pcolormesh(
             ax=ax, vmin=0, vmax=1, cmap="RdYlGn",
+            alpha=0.55,         # let basemap show through
             add_colorbar=False,
         )
-        ax.set_title(f"{crop.common_name_en}\n{period}", fontsize=10)
+        # Pin axis limits to the analysis bbox so the basemap fetch
+        # gets exactly the area we want.
+        ax.set_xlim(minx, maxx)
+        ax.set_ylim(miny, maxy)
+        # Esri World Imagery is the closest open analog to Google Earth's
+        # satellite layer; place labels are baked into the tile.
+        cx.add_basemap(
+            ax,
+            crs="EPSG:4326",
+            source=cx.providers.Esri.WorldImagery,
+            zoom=9,
+        )
+        ax.set_title(f"{crop.common_name_en}\n{period}", fontsize=11)
         ax.set_xlabel("")
         ax.set_ylabel("")
 
+# Single shared colorbar at the right.
+cbar = fig.colorbar(
+    im, ax=axes.ravel().tolist(),
+    orientation="vertical",
+    shrink=0.6,
+    pad=0.02,
+    label="Suitability score (0 = N / unsuitable; 1 = S1 / very suitable)",
+)
+
 fig.suptitle(
-    f"Quebec Tier 1 envelope — {QUEBEC_BBOX} — green = suitable, red = unsuitable",
+    f"Quebec Tier 1 envelope — bbox {QUEBEC_BBOX} — basemap © Esri WorldImagery",
     fontsize=12,
 )
-fig.tight_layout()
 out_png = Path(__file__).with_suffix(".png")
 fig.savefig(out_png, dpi=120, bbox_inches="tight")
 print(f"\nsaved: {out_png}")
