@@ -205,15 +205,41 @@ future_scores = score_all_crops(future_ds, f"future ({FUTURE_GCM} {FUTURE_SSP})"
 # subsequent runs are fast. Suitability data overlays at α=0.55 so the
 # underlying landscape (rivers, urban areas, agricultural lots) shows
 # through.
+#
+# Axis limits are computed from the **actual cell-edge extent** of each
+# row's data (AgERA5 is 0.1°, CanDCS-M6 is 1/12°), so the basemap
+# exactly matches the heatmap rather than extending past it.
+
+
+def cell_edge_extent(da: xr.DataArray) -> tuple[float, float, float, float]:
+    """Return (minx, miny, maxx, maxy) of the cell *edges* given coords
+    at cell centers."""
+    lats = da["lat"].values
+    lons = da["lon"].values
+    dlat = float(abs(lats[1] - lats[0])) if len(lats) > 1 else 0.1
+    dlon = float(abs(lons[1] - lons[0])) if len(lons) > 1 else 0.1
+    return (
+        float(lons.min()) - dlon / 2,
+        float(lats.min()) - dlat / 2,
+        float(lons.max()) + dlon / 2,
+        float(lats.max()) + dlat / 2,
+    )
+
 
 # %%
 fig, axes = plt.subplots(
     nrows=2, ncols=len(catalogue.crops),
     figsize=(5 * len(catalogue.crops), 4.5 * 2),
-    sharex=True, sharey=True,
+    # sharex/sharey OFF so each row can use its own data-derived extent
+    # (AgERA5 0.1° row and CanDCS-M6 1/12° row have different cell
+    # alignments; forcing a shared extent reintroduces the heatmap-vs-
+    # basemap gap the user spotted in the previous render).
 )
 
-minx, miny, maxx, maxy = QUEBEC_BBOX
+# One extent per row, computed from the row's first crop suitability.
+hist_extent = cell_edge_extent(next(iter(hist_scores.values())).score)
+future_extent = cell_edge_extent(next(iter(future_scores.values())).score)
+row_extents = (hist_extent, future_extent)
 
 for col, crop in enumerate(catalogue.crops):
     for row, (period, results) in enumerate(
@@ -223,15 +249,12 @@ for col, crop in enumerate(catalogue.crops):
         sui = results[crop.id]
         im = sui.score.plot.pcolormesh(
             ax=ax, vmin=0, vmax=1, cmap="RdYlGn",
-            alpha=0.55,         # let basemap show through
+            alpha=0.55,
             add_colorbar=False,
         )
-        # Pin axis limits to the analysis bbox so the basemap fetch
-        # gets exactly the area we want.
-        ax.set_xlim(minx, maxx)
-        ax.set_ylim(miny, maxy)
-        # Esri World Imagery is the closest open analog to Google Earth's
-        # satellite layer; place labels are baked into the tile.
+        ext = row_extents[row]
+        ax.set_xlim(ext[0], ext[2])
+        ax.set_ylim(ext[1], ext[3])
         cx.add_basemap(
             ax,
             crs="EPSG:4326",
