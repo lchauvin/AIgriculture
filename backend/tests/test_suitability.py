@@ -46,16 +46,17 @@ def test_corn_temperature_window_quebec_tuned():
 
 
 def test_corn_gdd_window_quebec_tuned():
-    """Corn GDD bounds are tuned for Quebec MG range (2200-3000 CHU)."""
+    """Corn GDD bounds cover the Quebec MG range *plus* cultivar
+    adaptation under warming (broad optimal range; absolute_max in
+    the heat-stress regime, not at the cultivar-window edge)."""
     cat = requirements.load_catalogue()
     corn = cat.by_id("corn_grain")
     g = corn.gdd
     assert g.base_temperature_c == 10.0
-    # Cover Quebec MG range (~700-1500 GDD base 10 °C) plus margin.
-    assert g.absolute_min == 700
-    assert g.optimal_min == 1000
-    assert g.optimal_max == 1500
-    assert g.absolute_max == 2000
+    assert g.absolute_min == 700      # earliest Quebec MG with margin
+    assert g.optimal_min == 1000      # mid-MG Quebec optimum
+    assert g.optimal_max == 2700      # spans MG range + cultivar adaptation
+    assert g.absolute_max == 3500     # heat-stress regime
 
 
 def test_unknown_crop_raises():

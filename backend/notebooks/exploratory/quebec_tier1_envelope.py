@@ -128,7 +128,11 @@ print(f"\nHistorical Dataset: time={hist_ds.sizes['time']} days, "
 # ## Pull CanDCS-M6 future climate
 #
 # Lazy OPeNDAP — only the bytes for the bbox + time window get
-# transferred.
+# transferred. We then slice down to the same April–September window
+# the historical AgERA5 pull covers, so historical and future
+# indicators integrate over equivalent calendar windows. (Otherwise
+# the full-year future GDD looks artificially inflated compared with
+# the Apr–Sep historical sum.)
 
 # %%
 print(f"\nCanDCS-M6 {FUTURE_GCM} {FUTURE_SSP} {FUTURE_TIME_RANGE[0]}–{FUTURE_TIME_RANGE[1]} ...")
@@ -139,7 +143,9 @@ future_ds = candcs.load(
     gcms=(FUTURE_GCM,),
     ssps=(FUTURE_SSP,),
 ).isel(gcm=0, ssp=0, drop=True)
-print(f"Future Dataset:  time={future_ds.sizes['time']} days, "
+# Slice to Apr–Sep to match the AgERA5 historical window.
+future_ds = future_ds.sel(time=future_ds["time.month"].isin([4, 5, 6, 7, 8, 9]))
+print(f"Future Dataset (Apr–Sep slice): time={future_ds.sizes['time']} days, "
       f"lat={future_ds.sizes['lat']}, lon={future_ds.sizes['lon']}")
 
 

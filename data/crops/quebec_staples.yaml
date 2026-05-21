@@ -34,6 +34,23 @@
 # from agronomic literature on Quebec/Prairie cultivars. Every adjustment
 # from the ECOCROP default is noted inline with a citation. The
 # *original* ECOCROP values are preserved in comments for traceability.
+#
+# Known limitation: cultivar adaptation under climate change
+# ----------------------------------------------------------
+# The trapezoid model assumes a *fixed* cultivar. In reality, when GDD
+# accumulation in a region increases (warming), farmers switch to
+# longer-season cultivars that absorb the extra heat and produce HIGHER
+# yields — not lower ones. Modeling this faithfully would require
+# multiple cultivar entries per crop and a cultivar-selection step in
+# Tier 1.
+#
+# As a workaround for v1, the GDD `absolute_max` bounds are set
+# generously — they represent the point at which heat stress (frequent
+# T > 32 °C, pollen sterilization, etc.) actually impairs the crop, not
+# the point at which a given cultivar exhausts its degree-day window.
+# The right ramp models real heat-stress regime, not cultivar mismatch.
+# A "cultivar adaptation" Phase 4 enhancement will replace this with a
+# best-cultivar selector.
 
 schema_version: 1
 
@@ -63,13 +80,16 @@ crops:
       # values from ~2200 (early MG, Saguenay/Lac-St-Jean) to ~3000
       # (full-season Montérégie). Rule of thumb: 1 GDD base 10 °C
       # ≈ 2 CHU, so Quebec cultivars target ~1100-1500 GDD base 10 °C.
-      # The ECOCROP-derived 1500-2700 range is for tropical/temperate
-      # full-season corn and is *too high* for Quebec.
+      # The optimal range below is for the locally-available cultivar
+      # span; the absolute_max is set generously to model cultivar
+      # adaptation under warming (see header note on cultivar
+      # adaptation). 3500 GDD ≈ 7000 CHU = US Corn Belt deep-summer
+      # heat sum; above that the right-ramp models real heat stress.
       base_temperature_c: 10.0
-      absolute_min: 700       # Quebec-tuned; covers the earliest 2200 CHU hybrids with margin
-      optimal_min: 1000       # Quebec-tuned; mid-season Quebec optimum
-      optimal_max: 1500       # Quebec-tuned; full-season Montérégie optimum
-      absolute_max: 2000      # Quebec-tuned; beyond this, no marginal yield gain
+      absolute_min: 700
+      optimal_min: 1000
+      optimal_max: 2700       # Quebec-tuned; spans MG range up to full-season + adaptation
+      absolute_max: 3500      # Quebec-tuned; heat-stress regime (US Corn Belt mid-summer +)
 
     precipitation:
       annual_absolute_min_mm: 400   # ECOCROP RMIN
@@ -128,13 +148,15 @@ crops:
       # Quebec MG 00 soybean: ~2200-2400 CHU ≈ 1100 GDD base 10°C
       # Quebec MG 0   soybean: ~2500-2700 CHU ≈ 1250 GDD base 10°C
       # Quebec MG I   soybean: ~2800+ CHU    ≈ 1400+ GDD base 10°C
-      # ECOCROP-derived 2400-2800 range is for warm-temperate full-season
-      # soybean and is *far too high* for Quebec.
+      # Optimal range covers locally-grown MG range up through long-MG
+      # cultivars that warming would enable; absolute_max set in the
+      # heat-stress regime where soy pollen viability drops (T_max > 35 °C
+      # frequently), not just at the upper end of cultivar windows.
       base_temperature_c: 10.0
-      absolute_min: 700       # Quebec-tuned; earliest MG 00 with margin
-      optimal_min: 900        # Quebec-tuned; mid-MG-00 Quebec optimum
-      optimal_max: 1400       # Quebec-tuned; MG I Montérégie comfortable
-      absolute_max: 2000      # Quebec-tuned; well-buffered upper bound
+      absolute_min: 700
+      optimal_min: 900
+      optimal_max: 2400       # Quebec-tuned; spans MG 00 → US Corn Belt MG IV
+      absolute_max: 3500      # Quebec-tuned; heat-stress regime
 
     precipitation:
       annual_absolute_min_mm: 450   # ECOCROP
@@ -189,17 +211,17 @@ crops:
 
     gdd:
       # Spring wheat (base 0 °C convention): the *cycle* heat sum (~90-
-      # 130 days) is 1500-2000 GDD. But our indicators integrate
-      # frost-free GDD across the full year (Quebec produces ~2800-3200
-      # GDD base 0 °C/year), so absolute_max must be set high enough
-      # that the extra heat after the wheat is harvested doesn't push
-      # the score off the right ramp. Range below is "cycle minimum"
-      # to "Quebec annual maximum, well-buffered".
+      # 130 days) is 1500-2000 GDD. Our indicators integrate frost-free
+      # GDD across the full growing season, so the optimal range needs
+      # to span Quebec's annual frost-free heat sum (~2800-3500) plus
+      # warming-driven extension. absolute_max sits in the heat-stress
+      # regime where wheat grain-filling is impaired (T > 30 °C during
+      # anthesis).
       base_temperature_c: 0.0
       absolute_min: 1100
-      optimal_min: 1500       # spring wheat cycle minimum
-      optimal_max: 3000       # Quebec-tuned; covers full annual heat sum
-      absolute_max: 4500      # Quebec-tuned; ECOCROP-derived 2500 cut Quebec out incorrectly
+      optimal_min: 1500
+      optimal_max: 4000       # Quebec-tuned; covers warming through 2070
+      absolute_max: 6000      # Quebec-tuned; heat-stress regime
 
     precipitation:
       annual_absolute_min_mm: 300
@@ -249,16 +271,16 @@ crops:
       tmean_absolute_max_c: 41.0   # ECOCROP TMAX
 
     gdd:
-      # Spring canola; base 5 °C is the AAFC convention. Same
-      # full-year-integration consideration as spring wheat: canola
-      # cycle needs 1100-1800 GDD base 5 °C but Quebec annual frost-free
-      # heat sum runs 1700-2200 GDD base 5 °C, so widening absolute_max
-      # avoids penalizing Quebec.
+      # Spring canola; base 5 °C is the AAFC convention. Canola is
+      # heat-sensitive (cool-season crop), so the right-ramp does
+      # eventually bite — but not before T_max routinely > 30 °C
+      # during flowering, which Quebec hits rarely under historical
+      # climate and increasingly under SSP5-8.5.
       base_temperature_c: 5.0
       absolute_min: 1100
       optimal_min: 1400
-      optimal_max: 2200       # Quebec-tuned; covers annual integration
-      absolute_max: 3000      # Quebec-tuned; ECOCROP-derived 2200 was too tight
+      optimal_max: 2800       # Quebec-tuned; full annual frost-free + adaptation
+      absolute_max: 4200      # Quebec-tuned; heat-stress regime (T>30 °C during flowering)
 
     precipitation:
       annual_absolute_min_mm: 400
