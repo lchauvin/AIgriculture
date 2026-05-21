@@ -18,16 +18,16 @@ cd ..  # back to repo root
 # in another terminal: frontend
 cd frontend
 npm run dev
-# → http://localhost:3000
+# → http://localhost:3232
 ```
 
 ## Scripts
 
 | command | purpose |
 |---|---|
-| `npm run dev` | Next.js dev server at :3000 with hot reload |
+| `npm run dev` | Next.js dev server at :3232 with hot reload |
 | `npm run build` | production build |
-| `npm run start` | run the production build at :3000 |
+| `npm run start` | run the production build at :3232 |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint via `next lint` |
 

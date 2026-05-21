@@ -37,10 +37,11 @@ def create_app() -> FastAPI:
     app.state.job_store = JobStore()
 
     # Permissive CORS for local development. Lock down before any
-    # public deployment.
+    # public deployment. Frontend dev server runs at :3232 (see
+    # frontend/package.json scripts).
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_origins=["http://localhost:3232", "http://127.0.0.1:3232"],
         allow_credentials=False,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
