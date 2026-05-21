@@ -2,7 +2,7 @@
 
 Next.js 14 (App Router) + TypeScript + Tailwind + MapLibre GL.
 Talks to the FastAPI backend at `NEXT_PUBLIC_API_URL` (default
-`http://localhost:8000`).
+`http://localhost:8008`).
 
 ## Quickstart
 
@@ -13,7 +13,7 @@ cp .env.local.example .env.local
 
 # in one terminal: backend
 cd ..  # back to repo root
-.venv/bin/uvicorn aigriculture.api.app:app --reload --port 8000
+.venv/bin/uvicorn aigriculture.api.app:app --reload --port 8008
 
 # in another terminal: frontend
 cd frontend

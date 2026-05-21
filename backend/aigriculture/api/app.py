@@ -5,7 +5,7 @@ and the dev/prod uvicorn entrypoints share the same factory.
 
 Run locally::
 
-    .venv/bin/uvicorn aigriculture.api.app:app --reload --port 8000
+    .venv/bin/uvicorn aigriculture.api.app:app --reload --port 8008
 """
 
 from __future__ import annotations
