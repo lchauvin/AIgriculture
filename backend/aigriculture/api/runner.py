@@ -23,6 +23,7 @@ import numpy as np
 import xarray as xr
 
 from ..data.agera5 import AgERA5Source
+from ..data.candcs_m6 import CanDCSM6Source
 from ..data.soilgrids import SoilGridsSource
 from ..suitability import envelope as envelope_mod
 from ..suitability import indicators as indicators_mod
@@ -33,7 +34,9 @@ from .schemas import (
     CropSuitabilityGrid,
     EnvelopeRequest,
     EnvelopeResult,
+    FutureScenario,
     GAEZClass,
+    HistoricalScenario,
     ProvenanceStamp,
 )
 
@@ -94,22 +97,15 @@ def _compute_envelope(
             f"{[c.id for c in catalogue.crops]}"
         )
 
-    # 1) AgERA5 historical — same April-September window the Tier 1
-    #    notebook uses (full year increases AgERA5 quota for negligible
-    #    Tier 1 signal — winter doesn't move the score). One pull per
-    #    year, concatenated.
-    agera5 = AgERA5Source(cache_dir=agera5_cache_dir)
-    hist_pieces = []
-    for year in sorted(req.historical_years):
-        piece = agera5.load(
-            bbox=req.bbox,
-            time_range=(dt.date(year, 4, 1), dt.date(year, 9, 30)),
-            variables=("t2m_min", "t2m_max", "precip"),
+    # 1) Climate — branch on scenario kind.
+    if isinstance(req.scenario, HistoricalScenario):
+        ds, climate_prov = _load_historical(
+            req.bbox, req.scenario, cache_dir=agera5_cache_dir
         )
-        hist_pieces.append(
-            piece.rename({"t2m_min": "tasmin", "t2m_max": "tasmax", "precip": "pr"})
-        )
-    ds = xr.concat(hist_pieces, dim="time")
+    elif isinstance(req.scenario, FutureScenario):
+        ds, climate_prov = _load_future(req.bbox, req.scenario)
+    else:
+        raise TypeError(f"Unknown scenario type {type(req.scenario).__name__}")
 
     # 2) SoilGrids topsoil pH on the climate grid.
     soil = SoilGridsSource()
@@ -139,42 +135,101 @@ def _compute_envelope(
         if grids is not None:
             grids.append(_grid_for_crop(sui, crop.id))
 
-    # 4) Provenance — record what we consumed.
-    prov: list[ProvenanceStamp] = []
-    agera5_prov = agera5.provenance(
-        bbox=req.bbox,
-        time_range=(
-            dt.date(min(req.historical_years), 4, 1),
-            dt.date(max(req.historical_years), 9, 30),
-        ),
-        variables=("t2m_min", "t2m_max", "precip"),
-    )
-    prov.append(
-        ProvenanceStamp(
-            source=agera5_prov.source_name,
-            version=agera5_prov.source_version,
-            fingerprint=agera5_prov.fingerprint(),
-            license=agera5_prov.license,
-            citation_key=agera5_prov.citation_key,
-        )
-    )
+    # 4) Provenance.
     soil_prov = soil.provenance(bbox=req.bbox, time_range=None)
-    prov.append(
+    prov: list[ProvenanceStamp] = [
+        climate_prov,
         ProvenanceStamp(
             source=soil_prov.source_name,
             version=soil_prov.source_version,
             fingerprint=soil_prov.fingerprint(),
             license=soil_prov.license,
             citation_key=soil_prov.citation_key,
-        )
-    )
+        ),
+    ]
 
     return EnvelopeResult(
         bbox=req.bbox,
-        historical_years=tuple(sorted(req.historical_years)),
+        scenario=req.scenario,
         crops=crop_scores,
         grids=grids,
         provenance=prov,
+    )
+
+
+# ---- climate loaders --------------------------------------------------------
+
+
+def _load_historical(
+    bbox: tuple[float, float, float, float],
+    scenario: HistoricalScenario,
+    *,
+    cache_dir: Path,
+) -> tuple[xr.Dataset, ProvenanceStamp]:
+    """AgERA5 Apr-Sep × N years, concatenated. Same window as the Tier 1
+    notebook so indicators are consistent."""
+    agera5 = AgERA5Source(cache_dir=cache_dir)
+    pieces = []
+    for year in sorted(scenario.years):
+        piece = agera5.load(
+            bbox=bbox,
+            time_range=(dt.date(year, 4, 1), dt.date(year, 9, 30)),
+            variables=("t2m_min", "t2m_max", "precip"),
+        )
+        pieces.append(
+            piece.rename({"t2m_min": "tasmin", "t2m_max": "tasmax", "precip": "pr"})
+        )
+    ds = xr.concat(pieces, dim="time")
+    prov = agera5.provenance(
+        bbox=bbox,
+        time_range=(
+            dt.date(min(scenario.years), 4, 1),
+            dt.date(max(scenario.years), 9, 30),
+        ),
+        variables=("t2m_min", "t2m_max", "precip"),
+    )
+    return ds, ProvenanceStamp(
+        source=prov.source_name,
+        version=prov.source_version,
+        fingerprint=prov.fingerprint(),
+        license=prov.license,
+        citation_key=prov.citation_key,
+    )
+
+
+def _load_future(
+    bbox: tuple[float, float, float, float],
+    scenario: FutureScenario,
+) -> tuple[xr.Dataset, ProvenanceStamp]:
+    """CanDCS-M6 OPeNDAP, single GCM × single SSP × year window, sliced
+    to Apr-Sep so the indicator window matches the historical baseline.
+    """
+    candcs = CanDCSM6Source()
+    ds = candcs.load(
+        bbox=bbox,
+        time_range=(
+            dt.date(scenario.start_year, 1, 1),
+            dt.date(scenario.end_year, 12, 31),
+        ),
+        gcms=(scenario.gcm,),
+        ssps=(scenario.ssp,),
+    ).isel(gcm=0, ssp=0, drop=True)
+    # Slice to Apr-Sep (months 4-9) for like-for-like with historical.
+    ds = ds.sel(time=ds["time.month"].isin([4, 5, 6, 7, 8, 9]))
+    prov = candcs.provenance(
+        bbox=bbox,
+        time_range=(
+            dt.date(scenario.start_year, 1, 1),
+            dt.date(scenario.end_year, 12, 31),
+        ),
+        variables=("tasmin", "tasmax", "pr"),
+    )
+    return ds, ProvenanceStamp(
+        source=prov.source_name,
+        version=prov.source_version,
+        fingerprint=prov.fingerprint(),
+        license=prov.license,
+        citation_key=prov.citation_key,
     )
 
 

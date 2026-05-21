@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Union
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -45,21 +45,95 @@ class GAEZClass(str, Enum):
 # ---- requests ---------------------------------------------------------------
 
 
+class HistoricalScenario(BaseModel):
+    """Compute against AgERA5 historical climate.
+
+    The runner pulls April–September of each year (the Tier 1 envelope
+    indicators only need growing-season days) and integrates indicators
+    across the multi-year sample.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["historical"] = "historical"
+    years: tuple[int, ...] = Field(
+        default=(2017, 2018, 2019),
+        min_length=1,
+        description="Calendar years to pull AgERA5 historical climate for.",
+    )
+
+
+class FutureScenario(BaseModel):
+    """Compute against CanDCS-M6 (Sobie 2024) projections.
+
+    GCM + SSP combinations available in the AIgriculture
+    ``CanDCSM6Source.GCM_REGISTRY``: CanESM5, MPI-ESM1-2-LR, MIROC6,
+    GFDL-ESM4, EC-Earth3. SSPs: ssp126 / ssp245 / ssp370 / ssp585. The
+    runner slices to Apr–Sep so future indicators integrate over the
+    same calendar window as historical.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["future"] = "future"
+    gcm: str = Field(
+        default="CanESM5",
+        description="GCM identifier from CanDCSM6Source.GCM_REGISTRY.",
+    )
+    ssp: Literal["ssp126", "ssp245", "ssp370", "ssp585"] = Field(
+        default="ssp245",
+        description="Shared Socioeconomic Pathway.",
+    )
+    start_year: int = Field(
+        default=2049,
+        ge=2015,
+        le=2100,
+        description="First calendar year of the future window (inclusive).",
+    )
+    end_year: int = Field(
+        default=2051,
+        ge=2015,
+        le=2100,
+        description="Last calendar year of the future window (inclusive).",
+    )
+
+    @model_validator(mode="after")
+    def _check_range(self) -> "FutureScenario":
+        if self.start_year > self.end_year:
+            raise ValueError(
+                f"start_year ({self.start_year}) must be ≤ end_year "
+                f"({self.end_year})."
+            )
+        if (self.end_year - self.start_year) > 30:
+            raise ValueError(
+                "Future window cannot exceed 30 years for the MVP. "
+                "OPeNDAP slices and ensemble overhead grow linearly."
+            )
+        return self
+
+
+# Discriminated union — Pydantic chooses Historical vs Future based on
+# the ``kind`` literal. Keeps the JSON schema explicit on /docs.
+Scenario = Annotated[
+    Union[HistoricalScenario, FutureScenario],
+    Field(discriminator="kind"),
+]
+
+
 class EnvelopeRequest(BaseModel):
     """POST /api/v1/envelope body.
 
     Compute Tier 1 climatic-envelope suitability for a region against the
-    Quebec staples catalogue. Historical-only for the MVP; SSP-projection
-    support lands once we wire CanDCS-M6 into the runner.
+    Quebec staples catalogue, under either an AgERA5 historical baseline
+    or a CanDCS-M6 future SSP projection.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     bbox: BBox
-    historical_years: tuple[int, ...] = Field(
-        default=(2017, 2018, 2019),
-        min_length=1,
-        description="Calendar years to pull AgERA5 historical climate for.",
+    scenario: Scenario = Field(
+        default_factory=HistoricalScenario,
+        description="Historical (AgERA5) or future (CanDCS-M6) climate source.",
     )
     crops: tuple[str, ...] | None = Field(
         default=None,
@@ -166,7 +240,9 @@ class EnvelopeResult(BaseModel):
     """The job's payload when status == succeeded."""
 
     bbox: BBox
-    historical_years: tuple[int, ...]
+    scenario: Scenario = Field(
+        description="The scenario that produced this result — echoed for clarity.",
+    )
     crops: list[CropEnvelopeScore]
     grids: list[CropSuitabilityGrid] | None = Field(
         default=None,
@@ -243,11 +319,14 @@ __all__ = [
     "CropSuitabilityGrid",
     "EnvelopeRequest",
     "EnvelopeResult",
+    "FutureScenario",
     "GAEZClass",
+    "HistoricalScenario",
     "JobAccepted",
     "JobStatus",
     "JobView",
     "ProvenanceStamp",
+    "Scenario",
 ]
 
 

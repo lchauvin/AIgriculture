@@ -27,7 +27,9 @@ from aigriculture.api.schemas import (
     CropSuitabilityGrid,
     EnvelopeRequest,
     EnvelopeResult,
+    FutureScenario,
     GAEZClass,
+    HistoricalScenario,
     JobStatus,
     JobView,
     ProvenanceStamp,
@@ -40,14 +42,14 @@ from aigriculture.api.schemas import (
 def _sample_request() -> EnvelopeRequest:
     return EnvelopeRequest(
         bbox=(-74.0, 45.0, -73.0, 46.0),
-        historical_years=(2018,),
+        scenario=HistoricalScenario(years=(2018,)),
     )
 
 
 def _sample_result(req: EnvelopeRequest) -> EnvelopeResult:
     return EnvelopeResult(
         bbox=req.bbox,
-        historical_years=req.historical_years,
+        scenario=req.scenario,
         crops=[
             CropEnvelopeScore(
                 crop_id="corn_grain",
@@ -78,10 +80,46 @@ def _sample_result(req: EnvelopeRequest) -> EnvelopeResult:
 
 
 class TestEnvelopeRequest:
-    def test_basic_request_validates(self) -> None:
+    def test_default_scenario_is_historical(self) -> None:
         req = EnvelopeRequest(bbox=(-74.0, 45.0, -73.0, 46.0))
-        assert req.historical_years == (2017, 2018, 2019)
+        assert isinstance(req.scenario, HistoricalScenario)
+        assert req.scenario.years == (2017, 2018, 2019)
         assert req.crops is None
+
+    def test_future_scenario_discriminator(self) -> None:
+        req = EnvelopeRequest(
+            bbox=(-74.0, 45.0, -73.0, 46.0),
+            scenario=FutureScenario(
+                gcm="MIROC6", ssp="ssp585", start_year=2070, end_year=2072
+            ),
+        )
+        assert isinstance(req.scenario, FutureScenario)
+        assert req.scenario.gcm == "MIROC6"
+        assert req.scenario.ssp == "ssp585"
+
+    def test_future_scenario_from_json_dict(self) -> None:
+        """The discriminator dispatches correctly on JSON-style input."""
+        req = EnvelopeRequest.model_validate(
+            {
+                "bbox": [-74.0, 45.0, -73.0, 46.0],
+                "scenario": {
+                    "kind": "future",
+                    "gcm": "CanESM5",
+                    "ssp": "ssp245",
+                    "start_year": 2049,
+                    "end_year": 2051,
+                },
+            }
+        )
+        assert isinstance(req.scenario, FutureScenario)
+
+    def test_future_scenario_rejects_inverted_year_range(self) -> None:
+        with pytest.raises(ValueError, match="start_year"):
+            FutureScenario(start_year=2070, end_year=2050)
+
+    def test_future_scenario_rejects_oversized_window(self) -> None:
+        with pytest.raises(ValueError, match="30 years"):
+            FutureScenario(start_year=2020, end_year=2080)
 
     def test_rejects_inverted_lon(self) -> None:
         with pytest.raises(ValueError, match="longitude"):
@@ -141,7 +179,7 @@ class TestEnvelopeResultSorting:
             )
             for i, score in enumerate([0.3, 0.9, 0.6])
         ]
-        res = EnvelopeResult(bbox=req.bbox, historical_years=req.historical_years, crops=crops)
+        res = EnvelopeResult(bbox=req.bbox, scenario=req.scenario, crops=crops)
         assert [c.combined_score for c in res.crops] == [0.9, 0.6, 0.3]
 
     def test_grids_reorder_to_match_sorted_crops(self) -> None:
@@ -187,7 +225,7 @@ class TestEnvelopeResultSorting:
         ]
         res = EnvelopeResult(
             bbox=req.bbox,
-            historical_years=req.historical_years,
+            scenario=req.scenario,
             crops=crops,
             grids=grids,
         )
@@ -295,7 +333,7 @@ def test_envelope_post_returns_202_and_job_id(app_with_fake_runner) -> None:
         "/api/v1/envelope",
         json={
             "bbox": [-74.0, 45.0, -73.0, 46.0],
-            "historical_years": [2018],
+            "scenario": {"kind": "historical", "years": [2018]},
         },
     )
     assert r.status_code == 202
@@ -319,7 +357,7 @@ def test_full_post_then_poll_completes(app_with_fake_runner) -> None:
     client = TestClient(app_with_fake_runner)
     r1 = client.post(
         "/api/v1/envelope",
-        json={"bbox": [-74.0, 45.0, -73.0, 46.0], "historical_years": [2018]},
+        json={"bbox": [-74.0, 45.0, -73.0, 46.0], "scenario": {"kind": "historical", "years": [2018]}},
     )
     assert r1.status_code == 202
     poll = r1.json()["poll_url"]
