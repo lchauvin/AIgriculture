@@ -63,15 +63,18 @@ export default function Home() {
     return result.grids.find((g) => g.crop_id === selectedCropId) ?? null;
   }, [result, selectedCropId]);
 
-  // The bbox rectangle should always frame the *actual data extent*,
-  // not the user's requested cell-center bbox. AgERA5 cells centered on
-  // e.g. lat 45.0 paint from 44.95 to 45.05, so the heatmap spills
-  // half a cell past the requested bbox edges. Once a result is in,
-  // derive the cell-edge extent from any grid (all crops share the
-  // same lat/lon coords). Before any result, fall back to the user's
-  // requested bbox so the rectangle still tells them what they asked for.
+  // The bbox rectangle should frame the *actual data extent* when the
+  // current bbox state matches whatever the result was computed for —
+  // AgERA5 cells centered on e.g. lat 45.0 paint from 44.95 to 45.05,
+  // so the heatmap spills half a cell past the requested bbox edges.
+  // Once the user starts editing the bbox (by dragging on the map or
+  // by typing new numbers) we fall back to their live bbox so the
+  // rectangle tracks the drag instead of staying glued to the stale
+  // grid extent.
   const displayBbox: Bbox = useMemo(() => {
-    const grid = result?.grids?.[0];
+    if (!result) return bbox;
+    if (!bboxesApproxEqual(result.bbox, bbox)) return bbox;
+    const grid = result.grids?.[0];
     if (!grid) return bbox;
     const [dLat, dLon] = grid.cell_size_deg;
     return [
@@ -189,7 +192,13 @@ export default function Home() {
         </aside>
 
         <section className="relative flex-1">
-          <MapView bbox={displayBbox} gridOverlay={selectedGrid} />
+          <MapView
+            bbox={displayBbox}
+            gridOverlay={selectedGrid}
+            // Interactive only when not running. Edits flow through
+            // setBbox, which auto-syncs the sidebar inputs.
+            onBboxChange={isRunning ? undefined : setBbox}
+          />
         </section>
       </div>
     </main>
@@ -253,6 +262,13 @@ function YearsInput({
       />
     </label>
   );
+}
+
+function bboxesApproxEqual(a: Bbox, b: Bbox, eps = 1e-6): boolean {
+  for (let i = 0; i < 4; i++) {
+    if (Math.abs(a[i] - b[i]) > eps) return false;
+  }
+  return true;
 }
 
 function JobStatusBar({ job }: { job: JobView }) {
