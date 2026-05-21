@@ -40,6 +40,14 @@ from .weather import XarrayWeatherDataProvider
 DRY_MATTER_TO_GRAIN_FACTOR = 1.16  # ÷1000 then × this → t/ha grain @14% moisture
 # (1 / (1 - 0.14) ≈ 1.163; the 14% moisture standard is the FAO grain-market reference.)
 
+# Atmospheric CO₂ concentration (ppm) — must be set for Wofost72 assimilation
+# to produce non-zero biomass. The CO2AMAXTB lookup is *zero* at the
+# PCSE-default sentinel (-99 ppm), which is the silent footgun that
+# leaves the canopy frozen at the initial LAIEM. We set 415 ppm as the
+# default — global atmospheric CO₂ averaged 414.7 ppm for 2021 (NOAA
+# Mauna Loa). Override per simulation year if you care.
+DEFAULT_CO2_PPM: float = 415.0
+
 
 def _yield_t_ha(twso_kg_ha_dm: float) -> float:
     """Convert TWSO (Total Weight Storage Organs, kg/ha dry matter) to
@@ -97,6 +105,7 @@ def run_wofost_pp(
     longitude: float | None = None,
     elevation: float = 100.0,
     site_wav: float = 10.0,
+    co2_ppm: float = DEFAULT_CO2_PPM,
     max_duration_days: int = 200,
     pcse_model: Any = None,
     weather_provider: WeatherDataProvider | None = None,  # type: ignore[name-defined]
@@ -152,6 +161,12 @@ def run_wofost_pp(
     soild = DummySoilDataProvider()
     sited = WOFOST72SiteDataProvider(WAV=site_wav)
     paramprov = ParameterProvider(cropdata=cropd, soildata=soild, sitedata=sited)
+    # CO₂ is read by the assimilation module from the merged parameter
+    # provider. WOFOST72SiteDataProvider does not expose it, and the
+    # cropdata YAMLs leave it as the sentinel -99, which the CO2AMAXTB
+    # lookup interprets as "zero atmosphere" and zeroes out assimilation.
+    # We inject it through PCSE's override mechanism.
+    paramprov.set_override("CO2", co2_ppm, check=False)
 
     if weather_provider is None:
         weather_provider = XarrayWeatherDataProvider(

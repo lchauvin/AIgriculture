@@ -90,10 +90,11 @@ def test_weather_provider_populates_store():
 
 
 def test_weather_provider_unit_conversion():
-    """Kelvin temperatures, kg/m²/s precipitation, MJ/m²/d radiation should
-    all be normalized to PCSE's units."""
+    """Verify each input unit is normalized to PCSE's expected units in
+    the populated WeatherDataContainer (IRRAD: J/m²/d; VAP: hPa;
+    RAIN/E0/ES0/ET0: cm/day; TEMP: derived as (TMIN+TMAX)/2)."""
     ds = _synthetic_daily_climate(n_days=5)
-    # Re-encode in non-default units.
+    # Re-encode in non-default units to exercise every converter.
     ds["tasmin"] = ds["tasmin"] + 273.15
     ds["tasmin"].attrs["units"] = "K"
     ds["tasmax"] = ds["tasmax"] + 273.15
@@ -107,17 +108,23 @@ def test_weather_provider_unit_conversion():
     rec = wp(dt.date(2018, 5, 1))
     assert rec.TMIN == pytest.approx(10.0)
     assert rec.TMAX == pytest.approx(25.0)
-    assert rec.RAIN == pytest.approx(3.0)
-    assert rec.IRRAD == pytest.approx(18_000.0, rel=1e-3)  # kJ/m²/d
+    # 3 mm/day → 0.3 cm/day
+    assert rec.RAIN == pytest.approx(0.3)
+    # 18 MJ/m²/d → 18e6 J/m²/d
+    assert rec.IRRAD == pytest.approx(18_000_000.0, rel=1e-3)
+    # Mean temperature must be present (PCSE's optional but
+    # leaf-dynamics-required ``TEMP``).
+    assert rec.TEMP == pytest.approx((10.0 + 25.0) / 2)
 
 
 def test_weather_provider_synthesizes_vap_and_wind_when_missing():
     ds = _synthetic_daily_climate(n_days=5, tasmin_c=12.0)
     wp = XarrayWeatherDataProvider(ds)
     rec = wp(dt.date(2018, 5, 1))
-    # Synthetic VAP equals the saturation vapor pressure at TMIN.
-    expected_vap = _magnus_saturation_vapor_kpa(12.0)
-    assert rec.VAP == pytest.approx(expected_vap, rel=1e-6)
+    # PCSE WeatherDataContainer stores VAP in hPa; our Magnus output is
+    # in kPa, so the stored value is 10× the kPa estimate.
+    expected_vap_hpa = _magnus_saturation_vapor_kpa(12.0) * 10.0
+    assert rec.VAP == pytest.approx(expected_vap_hpa, rel=1e-6)
     assert rec.WIND == pytest.approx(FAO_PM_WIND_DEFAULT_M_S)
     assert wp.approximations.vap is True
     assert wp.approximations.wind is True
@@ -126,11 +133,13 @@ def test_weather_provider_synthesizes_vap_and_wind_when_missing():
 
 def test_weather_provider_uses_real_vap_and_wind_when_present():
     ds = _synthetic_daily_climate(n_days=5)
+    # vap stored on the input ds is in kPa; the provider converts to hPa
+    # for the WeatherDataContainer.
     ds["vap"] = (("time",), np.full(5, 1.5, dtype="float32"))
     ds["wind"] = (("time",), np.full(5, 4.0, dtype="float32"))
     wp = XarrayWeatherDataProvider(ds)
     rec = wp(dt.date(2018, 5, 1))
-    assert rec.VAP == pytest.approx(1.5)
+    assert rec.VAP == pytest.approx(15.0)  # 1.5 kPa × 10 = 15 hPa
     assert rec.WIND == pytest.approx(4.0)
     assert wp.approximations.vap is False
     assert wp.approximations.wind is False

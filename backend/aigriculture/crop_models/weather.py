@@ -61,9 +61,15 @@ from pcse.util import reference_ET
 pcse_settings.METEO_RANGE_CHECKS = False
 
 CELSIUS_PER_KELVIN: Final = 273.15
-KJ_PER_J: Final = 1.0e-3
 SECONDS_PER_DAY: Final = 86400.0
 FAO_PM_WIND_DEFAULT_M_S: Final = 2.0
+MM_PER_CM: Final = 10.0          # PCSE WeatherDataContainer expects RAIN/E0/ES0/ET0 in cm/day
+HPA_PER_KPA: Final = 10.0        # ... and VAP in hPa
+# IRRAD: PCSE expects J/m²/day on the WeatherDataContainer (the
+# ``units`` dict says ``J/m2/day`` and the range ceiling is 40e6
+# J/m²/d). Earlier versions of these notes incorrectly claimed
+# kJ/m²/d. AgERA5 ships solar_radiation_flux already in J/m²/d so
+# we pass it through directly.
 
 
 def _to_celsius(da: xr.DataArray) -> xr.DataArray:
@@ -76,24 +82,23 @@ def _to_celsius(da: xr.DataArray) -> xr.DataArray:
     return da
 
 
-def _to_kj_m2_day(da: xr.DataArray) -> xr.DataArray:
-    """Normalize a radiation field to kJ/m²/day, the PCSE convention."""
+def _to_j_m2_day(da: xr.DataArray) -> xr.DataArray:
+    """Normalize a radiation field to J/m²/day, the PCSE convention
+    (see ``pcse.base.weather.WeatherDataContainer.units``)."""
     units = (da.attrs.get("units") or "").strip().lower()
     if units in {"w m-2", "w/m2", "w m^-2"}:
-        out = da * SECONDS_PER_DAY * KJ_PER_J
+        out = da * SECONDS_PER_DAY
     elif units in {"j m-2", "j/m2", "j m-2 day-1", "j m-2 d-1"}:
-        out = da * KJ_PER_J
-    elif units in {"kj m-2", "kj/m2", "kj m-2 day-1", "kj m-2 d-1"}:
         out = da * 1.0
-    elif units in {"mj m-2", "mj m-2 day-1", "mj/m2"}:
+    elif units in {"kj m-2", "kj/m2", "kj m-2 day-1", "kj m-2 d-1"}:
         out = da * 1000.0
+    elif units in {"mj m-2", "mj m-2 day-1", "mj/m2"}:
+        out = da * 1.0e6
     else:
-        # AgERA5 ships solar_rad as J/m²/day in practice; assume so when
-        # the units attribute is missing. PCSE will raise a clear error
-        # if the magnitude is wrong, surfacing this.
-        out = da * KJ_PER_J
+        # AgERA5 ships solar_rad as J/m²/day in practice; pass through.
+        out = da * 1.0
     out.attrs.update(da.attrs)
-    out.attrs["units"] = "kJ/m2/day"
+    out.attrs["units"] = "J/m2/day"
     return out
 
 
@@ -199,7 +204,7 @@ class XarrayWeatherDataProvider(WeatherDataProvider):
         tmin_c = _to_celsius(ds["tasmin"]).values
         tmax_c = _to_celsius(ds["tasmax"]).values
         rain_mm = _precip_to_mm_day(ds["pr"]).values
-        irrad_kj = _to_kj_m2_day(ds["rsds"]).values
+        irrad_j = _to_j_m2_day(ds["rsds"]).values
 
         if "vap" in ds.data_vars:
             vap_kpa = ds["vap"].values  # assume already kPa
@@ -238,38 +243,52 @@ class XarrayWeatherDataProvider(WeatherDataProvider):
             dates = list(times)
 
         for i, day in enumerate(dates):
-            # Penman-Monteith reference ET (mm/day) for the three PCSE
-            # potentials — water surface (E0), bare soil (ES0), closed
-            # crop canopy (ET0). PCSE expects these populated; computing
-            # via its own utility keeps the methodology consistent with
-            # the rest of WOFOST's water-balance module.
-            e0, es0, et0 = reference_ET(
+            tmin_today = float(tmin_c[i])
+            tmax_today = float(tmax_c[i])
+            irrad_today_j = float(irrad_j[i])
+            vap_today_kpa = float(vap_kpa[i])
+            wind_today = float(wind_ms[i])
+
+            # Reference ET — water surface (E0), bare soil (ES0), closed
+            # crop canopy (ET0). All in mm/day. ``reference_ET`` wants
+            # IRRAD in J/m²/d and VAP in hPa.
+            e0_mm, es0_mm, et0_mm = reference_ET(
                 DAY=day,
                 LAT=self.latitude,
                 ELEV=self.elevation,
-                TMIN=float(tmin_c[i]),
-                TMAX=float(tmax_c[i]),
-                IRRAD=float(irrad_kj[i]) * 1000.0,  # PCSE reference_ET wants J/m²/d
-                VAP=float(vap_kpa[i]) * 10.0,        # and VAP in hPa (1 kPa = 10 hPa)
-                WIND=float(wind_ms[i]),
+                TMIN=tmin_today,
+                TMAX=tmax_today,
+                IRRAD=irrad_today_j,
+                VAP=vap_today_kpa * HPA_PER_KPA,
+                WIND=wind_today,
                 ANGSTA=self.angstA,
                 ANGSTB=self.angstB,
             )
 
+            # The WeatherDataContainer expects PCSE's idiosyncratic units:
+            #   IRRAD  J/m²/day   (NOT kJ — see ``pcse.base.weather.WeatherDataContainer.units``)
+            #   VAP    hPa        (NOT kPa)
+            #   RAIN   cm/day     (NOT mm/day)
+            #   E0/ES0/ET0  cm/day  (NOT mm/day)
+            # Mismatches silently zero out the photosynthesis machinery.
+            # Also: TEMP is *documented* as auto-derived but in practice
+            # stays ``None`` unless explicitly passed, and leaf-dynamics
+            # crashes when it sees ``None - TBASE`` — provide it.
             wdc = WeatherDataContainer(
                 LAT=self.latitude,
                 LON=self.longitude,
                 ELEV=self.elevation,
                 DAY=day,
-                IRRAD=float(irrad_kj[i]),
-                TMIN=float(tmin_c[i]),
-                TMAX=float(tmax_c[i]),
-                VAP=float(vap_kpa[i]),
-                WIND=float(wind_ms[i]),
-                RAIN=float(rain_mm[i]),
-                E0=float(e0),
-                ES0=float(es0),
-                ET0=float(et0),
+                IRRAD=irrad_today_j,
+                TMIN=tmin_today,
+                TMAX=tmax_today,
+                TEMP=(tmin_today + tmax_today) / 2.0,
+                VAP=vap_today_kpa * HPA_PER_KPA,
+                WIND=wind_today,
+                RAIN=float(rain_mm[i]) / MM_PER_CM,
+                E0=float(e0_mm) / MM_PER_CM,
+                ES0=float(es0_mm) / MM_PER_CM,
+                ET0=float(et0_mm) / MM_PER_CM,
             )
             self._store_WeatherDataContainer(wdc, day)
 
