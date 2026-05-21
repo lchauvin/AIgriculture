@@ -24,6 +24,7 @@ from aigriculture.api.app import create_app
 from aigriculture.api.jobs import JobStore
 from aigriculture.api.schemas import (
     CropEnvelopeScore,
+    CropSuitabilityGrid,
     EnvelopeRequest,
     EnvelopeResult,
     GAEZClass,
@@ -142,6 +143,57 @@ class TestEnvelopeResultSorting:
         ]
         res = EnvelopeResult(bbox=req.bbox, historical_years=req.historical_years, crops=crops)
         assert [c.combined_score for c in res.crops] == [0.9, 0.6, 0.3]
+
+    def test_grids_reorder_to_match_sorted_crops(self) -> None:
+        """When grids are passed in input order, the result's grids list
+        must follow the post-sort crop order so the frontend can iterate
+        them in lockstep."""
+        req = _sample_request()
+        crops = [
+            CropEnvelopeScore(
+                crop_id="cold",
+                scientific_name="X cold",
+                common_name_en="Cold crop",
+                envelope_score=1.0,
+                preference_score=0.2,
+                combined_score=0.2,
+                gaez_class=GAEZClass.S4,
+            ),
+            CropEnvelopeScore(
+                crop_id="hot",
+                scientific_name="X hot",
+                common_name_en="Hot crop",
+                envelope_score=1.0,
+                preference_score=0.9,
+                combined_score=0.9,
+                gaez_class=GAEZClass.S1,
+            ),
+        ]
+        grids = [
+            CropSuitabilityGrid(
+                crop_id="cold",
+                lats=[45.0, 46.0],
+                lons=[-74.0, -73.0],
+                cell_size_deg=(1.0, 1.0),
+                score_grid=[[0.2, 0.2], [0.2, 0.2]],
+            ),
+            CropSuitabilityGrid(
+                crop_id="hot",
+                lats=[45.0, 46.0],
+                lons=[-74.0, -73.0],
+                cell_size_deg=(1.0, 1.0),
+                score_grid=[[0.9, 0.9], [0.9, 0.9]],
+            ),
+        ]
+        res = EnvelopeResult(
+            bbox=req.bbox,
+            historical_years=req.historical_years,
+            crops=crops,
+            grids=grids,
+        )
+        assert [c.crop_id for c in res.crops] == ["hot", "cold"]
+        assert res.grids is not None
+        assert [g.crop_id for g in res.grids] == ["hot", "cold"]
 
 
 # ---- job store -------------------------------------------------------------

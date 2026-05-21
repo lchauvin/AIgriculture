@@ -30,6 +30,7 @@ from ..suitability import requirements as requirements_mod
 from .jobs import JobStore
 from .schemas import (
     CropEnvelopeScore,
+    CropSuitabilityGrid,
     EnvelopeRequest,
     EnvelopeResult,
     GAEZClass,
@@ -126,12 +127,17 @@ def _compute_envelope(
 
     # 3) Score every requested crop.
     crop_scores: list[CropEnvelopeScore] = []
+    grids: list[CropSuitabilityGrid] | None = (
+        [] if req.include_grids else None
+    )
     for crop in crops:
         ind = indicators_mod.compute_all(
             ds, gdd_base_temperature_c=crop.gdd.base_temperature_c
         )
         sui = envelope_mod.score_crop(ind, crop, soil_ph=soil_ph)
         crop_scores.append(_summarize_crop(sui, crop))
+        if grids is not None:
+            grids.append(_grid_for_crop(sui, crop.id))
 
     # 4) Provenance — record what we consumed.
     prov: list[ProvenanceStamp] = []
@@ -167,7 +173,37 @@ def _compute_envelope(
         bbox=req.bbox,
         historical_years=tuple(sorted(req.historical_years)),
         crops=crop_scores,
+        grids=grids,
         provenance=prov,
+    )
+
+
+def _grid_for_crop(
+    sui: envelope_mod.CropSuitability,
+    crop_id: str,
+) -> CropSuitabilityGrid:
+    """Pack a CropSuitability score grid into the wire schema."""
+    score = sui.score
+    lats = score["lat"].values
+    lons = score["lon"].values
+    d_lat = float(abs(lats[1] - lats[0])) if len(lats) > 1 else 0.1
+    d_lon = float(abs(lons[1] - lons[0])) if len(lons) > 1 else 0.1
+    # Ensure south→north ascending for the frontend.
+    if lats[0] > lats[-1]:
+        score = score.sortby("lat")
+        lats = score["lat"].values
+    raw = score.values
+    # Replace NaN with None for JSON.
+    score_grid: list[list[float | None]] = [
+        [None if not np.isfinite(v) else float(v) for v in row]
+        for row in raw
+    ]
+    return CropSuitabilityGrid(
+        crop_id=crop_id,
+        lats=[float(x) for x in lats],
+        lons=[float(x) for x in lons],
+        cell_size_deg=(d_lat, d_lon),
+        score_grid=score_grid,
     )
 
 

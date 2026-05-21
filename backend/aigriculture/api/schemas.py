@@ -68,6 +68,14 @@ class EnvelopeRequest(BaseModel):
             "Defaults to every crop in data/crops/quebec_staples.yaml."
         ),
     )
+    include_grids: bool = Field(
+        default=False,
+        description=(
+            "When true, the result also includes a per-cell suitability "
+            "grid per crop (frontend uses this to render colored map "
+            "overlays). Heavier payload; default off."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_bbox(self) -> "EnvelopeRequest":
@@ -132,12 +140,41 @@ class ProvenanceStamp(BaseModel):
     citation_key: str
 
 
+class CropSuitabilityGrid(BaseModel):
+    """Per-crop gridded suitability output for the frontend map overlay.
+
+    ``score_grid`` is shape ``[len(lats)][len(lons)]``; NaN cells (e.g.
+    out-of-coverage edges) are serialized as ``null``. ``lats`` and
+    ``lons`` are cell *centers* in EPSG:4326. The frontend builds a
+    polygon per cell with edges at ±½ cell width.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    crop_id: str
+    lats: list[float] = Field(description="Cell centers, ascending.")
+    lons: list[float] = Field(description="Cell centers, ascending.")
+    cell_size_deg: tuple[float, float] = Field(
+        description="(d_lat, d_lon) cell-edge widths in degrees.",
+    )
+    score_grid: list[list[float | None]] = Field(
+        description="Combined suitability score per cell, NaN→null.",
+    )
+
+
 class EnvelopeResult(BaseModel):
     """The job's payload when status == succeeded."""
 
     bbox: BBox
     historical_years: tuple[int, ...]
     crops: list[CropEnvelopeScore]
+    grids: list[CropSuitabilityGrid] | None = Field(
+        default=None,
+        description=(
+            "Populated when the request set ``include_grids=true``. "
+            "One entry per crop in the same order as ``crops``."
+        ),
+    )
     provenance: list[ProvenanceStamp] = Field(
         default_factory=list,
         description="One stamp per data source consumed for traceability.",
@@ -146,12 +183,22 @@ class EnvelopeResult(BaseModel):
     @model_validator(mode="after")
     def _sort_crops_by_score(self) -> "EnvelopeResult":
         # Always return crops ranked best→worst by combined score. The
-        # frontend never has to worry about sort order.
-        object.__setattr__(
-            self,
-            "crops",
-            sorted(self.crops, key=lambda c: -c.combined_score),
+        # frontend never has to worry about sort order. Grids are
+        # re-sorted to match.
+        crop_order = sorted(
+            range(len(self.crops)), key=lambda i: -self.crops[i].combined_score
         )
+        sorted_crops = [self.crops[i] for i in crop_order]
+        object.__setattr__(self, "crops", sorted_crops)
+        if self.grids is not None:
+            # Match grids → crops by id to be robust against any
+            # caller that passed them in a different order than crops.
+            by_id = {g.crop_id: g for g in self.grids}
+            object.__setattr__(
+                self,
+                "grids",
+                [by_id[c.crop_id] for c in sorted_crops if c.crop_id in by_id],
+            )
         return self
 
 
@@ -193,6 +240,7 @@ class JobView(BaseModel):
 __all__ = [
     "BBox",
     "CropEnvelopeScore",
+    "CropSuitabilityGrid",
     "EnvelopeRequest",
     "EnvelopeResult",
     "GAEZClass",
