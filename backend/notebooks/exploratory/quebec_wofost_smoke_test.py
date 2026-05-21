@@ -4,8 +4,20 @@ The first AIgriculture Tier 2 run. Pulls AgERA5 daily weather for a
 representative Montérégie point (Saint-Hyacinthe area, deep in Quebec
 corn country) for the full April – October corn-growing window of 2018,
 runs WOFOST 7.2 in potential-production mode against PCSE's
-Grain_maize_201 cultivar (~2500 CHU, mid-MG Quebec corn), and reports
-yield + phenology.
+Grain_maize_203 cultivar (~2700 CHU, mid-to-long-MG Quebec corn —
+TSUM total 1655 °C·day, base 8 °C), and reports yield + phenology.
+
+We picked Grain_maize_203 over the shorter Grain_maize_201/_202
+because its September 5 maturity date matches real Quebec harvest
+timing (Montérégie corn harvests mid-September). A cultivar sweep
+recorded in the project session notes showed: _201 (TSUM 1495) →
+yield 11.08 t/ha but matures Aug 27 (a month early); _203 (TSUM
+1655) → 10.17 t/ha, Sep 5 maturity (right); _205 (TSUM 1855) → 9.26
+t/ha, Sep 19 maturity. The longer-MG cultivars yielded *less* in
+PCSE PP — counterintuitive vs Quebec field reality, and a real
+Tier-2-calibration question for follow-up (PCSE's
+Grain_maize_NNN series varies in respiration and harvest-index
+allocation, not just TSUM).
 
 Comparison reference (StatCan Field Crop Reporting Series, Table
 32-10-0359-01):
@@ -29,7 +41,7 @@ Prerequisites:
 # %% [markdown]
 # # Quebec WOFOST smoke test
 #
-# Single point in Montérégie × Grain_maize_201 × 2018.
+# Single point in Montérégie × Grain_maize_203 × 2018.
 
 # %%
 from __future__ import annotations
@@ -113,11 +125,11 @@ print(f"  rsds mean    : {float(point_ds['rsds'].mean())/1e6:.1f} MJ/m²/day")
 # ## Run WOFOST 7.2 PP
 
 # %%
-print("\nRunning WOFOST 7.2 PP, Grain_maize_201...")
+print("\nRunning WOFOST 7.2 PP, Grain_maize_203...")
 result = wofost_runner.run_wofost_pp(
     weather_ds=point_ds,
     crop_name="maize",
-    variety_name="Grain_maize_201",
+    variety_name="Grain_maize_203",
     campaign_start=CAMPAIGN_START,
     emergence=EMERGENCE,
     harvest=HARVEST,
@@ -130,7 +142,7 @@ result = wofost_runner.run_wofost_pp(
 # ## Results
 
 # %%
-print("\n=== WOFOST 7.2 PP, Quebec Montérégie, 2018, Grain_maize_201 ===")
+print("\n=== WOFOST 7.2 PP, Quebec Montérégie, 2018, Grain_maize_203 ===")
 print(f"  yield (t/ha @14% moisture)  : {result.yield_t_ha:7.2f}")
 print(f"  TWSO (kg/ha dry matter)     : {result.twso_kg_ha_dm:7.0f}")
 print(f"  TAGP (above-ground biomass) : {result.tagp_kg_ha:7.0f}  kg/ha")
