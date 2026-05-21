@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* MapLibre fills its container; pin html/body so the map can be 100% height. */
+html,
+body,
+#__next {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: rgb(15 23 42); /* slate-900 */
+  color: rgb(226 232 240);   /* slate-200 */
+}

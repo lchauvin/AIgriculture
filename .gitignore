@@ -49,6 +49,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# TypeScript incremental build cache (regenerated on each `next build`)
+tsconfig.tsbuildinfo
+**/tsconfig.tsbuildinfo
+next-env.d.ts
+
 # ---- Geospatial / scientific data ----
 # Anything in data/ is by default not committed; check in by exception via
 # `git add -f path/to/file`.
