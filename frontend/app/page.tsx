@@ -63,6 +63,25 @@ export default function Home() {
     return result.grids.find((g) => g.crop_id === selectedCropId) ?? null;
   }, [result, selectedCropId]);
 
+  // The bbox rectangle should always frame the *actual data extent*,
+  // not the user's requested cell-center bbox. AgERA5 cells centered on
+  // e.g. lat 45.0 paint from 44.95 to 45.05, so the heatmap spills
+  // half a cell past the requested bbox edges. Once a result is in,
+  // derive the cell-edge extent from any grid (all crops share the
+  // same lat/lon coords). Before any result, fall back to the user's
+  // requested bbox so the rectangle still tells them what they asked for.
+  const displayBbox: Bbox = useMemo(() => {
+    const grid = result?.grids?.[0];
+    if (!grid) return bbox;
+    const [dLat, dLon] = grid.cell_size_deg;
+    return [
+      grid.lons[0] - dLon / 2,
+      grid.lats[0] - dLat / 2,
+      grid.lons[grid.lons.length - 1] + dLon / 2,
+      grid.lats[grid.lats.length - 1] + dLat / 2,
+    ];
+  }, [result, bbox]);
+
   async function handleAnalyze() {
     setError(null);
     setSelectedCropId(null);
@@ -157,7 +176,7 @@ export default function Home() {
         </aside>
 
         <section className="relative">
-          <MapView bbox={bbox} gridOverlay={selectedGrid} />
+          <MapView bbox={displayBbox} gridOverlay={selectedGrid} />
         </section>
       </div>
     </main>
