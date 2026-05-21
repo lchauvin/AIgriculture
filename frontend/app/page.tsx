@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import BboxControl from "@/app/components/BboxControl";
 import ResultPanel from "@/app/components/ResultPanel";
+import ScenarioControl from "@/app/components/ScenarioControl";
 import {
   ApiError,
   api,
@@ -13,6 +14,7 @@ import {
   type EnvelopeResult,
   type HealthResponse,
   type JobView,
+  type Scenario,
 } from "@/app/lib/api";
 
 // MapLibre needs browser globals; load it client-only with no SSR.
@@ -26,13 +28,16 @@ const MapView = dynamic(() => import("@/app/components/MapView"), {
 });
 
 const DEFAULT_BBOX: Bbox = [-74.0, 45.0, -72.5, 46.0];
-const DEFAULT_YEARS = [2017, 2018, 2019];
+const DEFAULT_SCENARIO: Scenario = {
+  kind: "historical",
+  years: [2017, 2018, 2019],
+};
 
 export default function Home() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [bbox, setBbox] = useState<Bbox>(DEFAULT_BBOX);
-  const [years, setYears] = useState<number[]>(DEFAULT_YEARS);
+  const [scenario, setScenario] = useState<Scenario>(DEFAULT_SCENARIO);
   const [job, setJob] = useState<JobView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedCropId, setSelectedCropId] = useState<string | null>(null);
@@ -95,7 +100,7 @@ export default function Home() {
     try {
       const accepted = await api.createEnvelope({
         bbox,
-        historical_years: years,
+        scenario,
         include_grids: true,
       });
       const initial: JobView = {
@@ -160,9 +165,13 @@ export default function Home() {
 
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-              Historical years
+              Scenario
             </h2>
-            <YearsInput value={years} onChange={setYears} disabled={isRunning} />
+            <ScenarioControl
+              scenario={scenario}
+              onChange={setScenario}
+              disabled={isRunning}
+            />
           </section>
 
           <button
@@ -232,35 +241,6 @@ function ConnectionBadge({
     <div className="rounded border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-400">
       Checking backend…
     </div>
-  );
-}
-
-function YearsInput({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: number[];
-  onChange: (years: number[]) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <label className="flex flex-col text-xs text-slate-400">
-      <span className="mb-1 uppercase tracking-wider">comma-separated</span>
-      <input
-        type="text"
-        disabled={disabled}
-        defaultValue={value.join(", ")}
-        onBlur={(e) => {
-          const ys = e.target.value
-            .split(",")
-            .map((s) => parseInt(s.trim(), 10))
-            .filter((n) => Number.isFinite(n));
-          if (ys.length) onChange(ys);
-        }}
-        className="rounded border border-slate-600 bg-slate-900 px-2 py-1 font-mono text-sm text-slate-100 disabled:opacity-50"
-      />
-    </label>
   );
 }
 

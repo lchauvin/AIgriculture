@@ -14,9 +14,42 @@ export type JobStatus = "pending" | "running" | "succeeded" | "failed";
 
 export type GAEZClass = "S1" | "S2" | "S3" | "S4" | "N";
 
+export type Ssp = "ssp126" | "ssp245" | "ssp370" | "ssp585";
+
+export interface HistoricalScenario {
+  kind: "historical";
+  years: number[];
+}
+
+export interface FutureScenario {
+  kind: "future";
+  gcm: string;
+  ssp: Ssp;
+  start_year: number;
+  end_year: number;
+}
+
+export type Scenario = HistoricalScenario | FutureScenario;
+
+/** GCMs available in the backend's CanDCSM6Source.GCM_REGISTRY. */
+export const AVAILABLE_GCMS = [
+  "CanESM5",
+  "MPI-ESM1-2-LR",
+  "MIROC6",
+  "GFDL-ESM4",
+  "EC-Earth3",
+] as const;
+
+export const AVAILABLE_SSPS: { value: Ssp; label: string }[] = [
+  { value: "ssp126", label: "SSP1-2.6 (strong mitigation)" },
+  { value: "ssp245", label: "SSP2-4.5 (middle of the road)" },
+  { value: "ssp370", label: "SSP3-7.0 (high)" },
+  { value: "ssp585", label: "SSP5-8.5 (fossil-fuelled)" },
+];
+
 export interface EnvelopeRequest {
   bbox: Bbox;
-  historical_years?: number[];
+  scenario?: Scenario;
   crops?: string[] | null;
   include_grids?: boolean;
 }
@@ -52,7 +85,7 @@ export interface ProvenanceStamp {
 
 export interface EnvelopeResult {
   bbox: Bbox;
-  historical_years: number[];
+  scenario: Scenario;
   crops: CropEnvelopeScore[];
   grids: CropSuitabilityGrid[] | null;
   provenance: ProvenanceStamp[];

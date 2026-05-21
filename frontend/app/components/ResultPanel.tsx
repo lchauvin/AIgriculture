@@ -1,6 +1,6 @@
 "use client";
 
-import type { CropEnvelopeScore, EnvelopeResult } from "@/app/lib/api";
+import type { CropEnvelopeScore, EnvelopeResult, Scenario } from "@/app/lib/api";
 
 interface ResultPanelProps {
   result: EnvelopeResult;
@@ -22,7 +22,7 @@ export default function ResultPanel({
     <div className="flex flex-col gap-3">
       <header>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-          Tier 1 envelope — {result.historical_years.join(", ")} historical
+          Tier 1 envelope — {describeScenario(result.scenario)}
         </h2>
         <p className="mt-1 text-xs text-slate-500">
           Click a crop to overlay its per-cell suitability on the map. The
@@ -120,6 +120,13 @@ function GaezBadge({ cls }: { cls: string }) {
       {cls}
     </span>
   );
+}
+
+function describeScenario(scenario: Scenario): string {
+  if (scenario.kind === "historical") {
+    return `historical ${scenario.years.join(", ")}`;
+  }
+  return `${scenario.gcm} ${scenario.ssp.toUpperCase()} ${scenario.start_year}–${scenario.end_year}`;
 }
 
 function ProvenanceList({ result }: { result: EnvelopeResult }) {
