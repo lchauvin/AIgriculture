@@ -45,6 +45,7 @@ import xarray as xr
 
 from aigriculture.data.agera5 import AgERA5Source
 from aigriculture.data.candcs_m6 import CanDCSM6Source
+from aigriculture.data.soilgrids import SoilGridsSource
 from aigriculture.suitability import envelope, indicators, requirements
 
 # %% [markdown]
@@ -150,28 +151,79 @@ print(f"Future Dataset (Apr–Sep slice): time={future_ds.sizes['time']} days, "
 
 
 # %% [markdown]
+# ## Load SoilGrids 2.0 topsoil pH and align to the climate grids
+#
+# pH(H₂O) at 0–5 cm is the relevant horizon for crop establishment.
+# SoilGrids streams at ~250 m via ISRIC's WebDAV VRT (CRS converted to
+# EPSG:4326 by the loader); we then interpolate linearly down to each
+# climate grid (AgERA5 0.1° historical, CanDCS-M6 1/12° future) using
+# xarray's ``interp``. pH is a smooth continuous field at agricultural
+# scales, so linear interpolation is well-justified.
+
+# %%
+print("\nSoilGrids 2.0 topsoil (0–5cm) pH...")
+soil = SoilGridsSource()
+soil_ds = soil.load(
+    bbox=QUEBEC_BBOX,
+    variables=("phh2o",),
+    depths=("0-5cm",),
+)
+ph_native = soil_ds["phh2o"].squeeze("depth", drop=True)
+# rioxarray uses x/y; rename to lon/lat for alignment with climate data
+# and ensure latitude is south→north ascending.
+ph_native = ph_native.rename({"x": "lon", "y": "lat"})
+if float(ph_native["lat"][0]) > float(ph_native["lat"][-1]):
+    ph_native = ph_native.sortby("lat")
+print(
+    f"SoilGrids pH grid: {ph_native.sizes['lat']} × {ph_native.sizes['lon']} cells, "
+    f"range {float(ph_native.min()):.2f} – {float(ph_native.max()):.2f}"
+)
+
+
+def align_ph_to(climate_dataset: xr.Dataset) -> xr.DataArray:
+    """Linearly interpolate native-grid SoilGrids pH onto a climate
+    dataset's lat/lon grid."""
+    return ph_native.interp(
+        lat=climate_dataset["lat"], lon=climate_dataset["lon"],
+        kwargs={"fill_value": "extrapolate"},
+    )
+
+
+hist_ph = align_ph_to(hist_ds)
+future_ph = align_ph_to(future_ds)
+print(
+    f"After interp to climate grids: "
+    f"historical (AgERA5) {hist_ph.shape}, "
+    f"future (CanDCS-M6) {future_ph.shape}"
+)
+
+
+# %% [markdown]
 # ## Score every crop, past + future
 
 # %%
-def score_all_crops(ds: xr.Dataset, label: str) -> dict[str, envelope.CropSuitability]:
+def score_all_crops(
+    ds: xr.Dataset,
+    label: str,
+    *,
+    soil_ph: xr.DataArray,
+) -> dict[str, envelope.CropSuitability]:
     print(f"\n--- scoring {label} ---")
     print(
         f"  {'crop':>14s}  {'envel':>6}  {'pref':>6}  {'combo':>6}  "
-        f"{'class':>5}  {'limiting':>14s}  per-factor envelope (T/GDD/Pr/GS)"
+        f"{'class':>5}  {'limiting':>14s}  per-factor envelope (T/GDD/Pr/GS/pH)"
     )
     results = {}
     for crop in catalogue.crops:
         ind = indicators_for_crop(ds, crop)
-        sui = envelope.score_crop(ind, crop)
+        sui = envelope.score_crop(ind, crop, soil_ph=soil_ph)
         results[crop.id] = sui
 
         env = float(sui.envelope_score.mean().values)
         pref = float(sui.preference_score.mean().values)
         combo = float(sui.score.mean().values)
-        # Envelope-based class (preserves GAEZ S1-S4-N semantics).
         cls = envelope.classify_gaez(xr.DataArray(env)).item()
 
-        # Modal limiting factor (from envelope).
         flat = sui.limiting_factor.values.flatten()
         flat = flat[flat != ""]
         if len(flat):
@@ -185,7 +237,8 @@ def score_all_crops(ds: xr.Dataset, label: str) -> dict[str, envelope.CropSuitab
             f"T={per.get('temperature', 0):.2f} "
             f"GDD={per.get('gdd', 0):.2f} "
             f"Pr={per.get('precipitation', 0):.2f} "
-            f"GS={per.get('growing_season', 0):.2f}"
+            f"GS={per.get('growing_season', 0):.2f} "
+            f"pH={per.get('soil_ph', 0):.2f}"
         )
         print(
             f"  {crop.id:>14s}  {env:>6.3f}  {pref:>6.3f}  {combo:>6.3f}  "
@@ -193,8 +246,10 @@ def score_all_crops(ds: xr.Dataset, label: str) -> dict[str, envelope.CropSuitab
         )
     return results
 
-hist_scores = score_all_crops(hist_ds, "historical (AgERA5)")
-future_scores = score_all_crops(future_ds, f"future ({FUTURE_GCM} {FUTURE_SSP})")
+hist_scores = score_all_crops(hist_ds, "historical (AgERA5)", soil_ph=hist_ph)
+future_scores = score_all_crops(
+    future_ds, f"future ({FUTURE_GCM} {FUTURE_SSP})", soil_ph=future_ph,
+)
 
 
 # %% [markdown]
