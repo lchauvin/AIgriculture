@@ -148,15 +148,40 @@ print(f"Future Dataset:  time={future_ds.sizes['time']} days, "
 # %%
 def score_all_crops(ds: xr.Dataset, label: str) -> dict[str, envelope.CropSuitability]:
     print(f"\n--- scoring {label} ---")
+    print(
+        f"  {'crop':>14s}  {'score':>6}  {'class':>5}  "
+        f"{'limiting':>14s}  per-factor (T/GDD/Pr/GS)"
+    )
     results = {}
     for crop in catalogue.crops:
         ind = indicators_for_crop(ds, crop)
         sui = envelope.score_crop(ind, crop)
         results[crop.id] = sui
+
         score = float(sui.score.mean().values)
-        # Class of the regional mean
         cls = envelope.classify_gaez(xr.DataArray(score)).item()
-        print(f"  {crop.id:>14s}: mean score {score:.3f}  → {cls}")
+
+        # Which factor is the modal limiter across the cells?
+        flat = sui.limiting_factor.values.flatten()
+        flat = flat[flat != ""]  # drop no-data cells
+        if len(flat):
+            unique, counts = np.unique(flat, return_counts=True)
+            modal_limit = unique[counts.argmax()]
+        else:
+            modal_limit = "—"
+
+        # Region-mean of each sub-score, for the diagnostic.
+        per = {k: float(v.mean().values) for k, v in sui.per_factor.items()}
+        per_str = (
+            f"T={per.get('temperature', 0):.2f} "
+            f"GDD={per.get('gdd', 0):.2f} "
+            f"Pr={per.get('precipitation', 0):.2f} "
+            f"GS={per.get('growing_season', 0):.2f}"
+        )
+        print(
+            f"  {crop.id:>14s}  {score:>6.3f}  {cls:>5}  "
+            f"{modal_limit:>14s}  {per_str}"
+        )
     return results
 
 hist_scores = score_all_crops(hist_ds, "historical (AgERA5)")

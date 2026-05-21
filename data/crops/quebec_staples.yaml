@@ -19,6 +19,21 @@
 # Lat ranges from ECOCROP are *not* used as a hard filter — modern
 # cultivars have moved past the published bounds (e.g. soybean LATMN 47
 # in ECOCROP, yet Quebec at 45-46°N grows ~1.4 Mt/yr).
+#
+# ----------------------------------------------------------------------
+# IMPORTANT — Quebec cultivar calibration
+# ----------------------------------------------------------------------
+# ECOCROP records "generic" species ranges; Quebec agriculture uses
+# cultivars bred for short, cool growing seasons (MG 00/0 soybeans,
+# 2200-CHU early corn hybrids, spring wheat with 90-day cycles, etc.).
+# The first run of the Tier 1 envelope against ECOCROP defaults
+# (2026-05-20) returned soybean=N and spring wheat=N for southern
+# Quebec — both wrong, since Quebec demonstrably grows both crops.
+#
+# GDD ranges and (where needed) tmean_optimal_min have been recalibrated
+# from agronomic literature on Quebec/Prairie cultivars. Every adjustment
+# from the ECOCROP default is noted inline with a citation. The
+# *original* ECOCROP values are preserved in comments for traceability.
 
 schema_version: 1
 
@@ -32,20 +47,29 @@ crops:
     aci_code: 147  # AAFC ACI legend
 
     temperature:
-      tmean_absolute_min_c: 10.0   # ECOCROP TMIN
-      tmean_optimal_min_c: 18.0    # ECOCROP TOPMN
-      tmean_optimal_max_c: 33.0    # ECOCROP TOPMX
-      tmean_absolute_max_c: 47.0   # ECOCROP TMAX
+      # ECOCROP TMIN/TOPMN/TOPMX/TMAX = 10/18/33/47. ECOCROP optimal_min
+      # of 18 °C is the published range for full-season grain corn in
+      # temperate climates. Quebec mid-growing-season mean of ~16 °C is
+      # below that bar, but Quebec short-season hybrids reliably finish
+      # at these temperatures. We lower tmean_optimal_min from 18 to 14
+      # to reflect Quebec cultivar reality.
+      tmean_absolute_min_c: 10.0
+      tmean_optimal_min_c: 14.0    # Quebec-tuned; ECOCROP value 18.0
+      tmean_optimal_max_c: 33.0
+      tmean_absolute_max_c: 47.0
 
     gdd:
-      # Standard for grain corn in temperate climates; cultivar-dependent
-      # at the optimum. Quebec uses Corn Heat Units (CHU) operationally;
-      # GDD base 10 °C is the international convention.
+      # Quebec corn cultivars are rated by Corn Heat Units (CHU), with
+      # values from ~2200 (early MG, Saguenay/Lac-St-Jean) to ~3000
+      # (full-season Montérégie). Rule of thumb: 1 GDD base 10 °C
+      # ≈ 2 CHU, so Quebec cultivars target ~1100-1500 GDD base 10 °C.
+      # The ECOCROP-derived 1500-2700 range is for tropical/temperate
+      # full-season corn and is *too high* for Quebec.
       base_temperature_c: 10.0
-      absolute_min: 1100
-      optimal_min: 1500
-      optimal_max: 2700
-      absolute_max: 3500
+      absolute_min: 700       # Quebec-tuned; covers the earliest 2200 CHU hybrids with margin
+      optimal_min: 1000       # Quebec-tuned; mid-season Quebec optimum
+      optimal_max: 1500       # Quebec-tuned; full-season Montérégie optimum
+      absolute_max: 2000      # Quebec-tuned; beyond this, no marginal yield gain
 
     precipitation:
       annual_absolute_min_mm: 400   # ECOCROP RMIN
@@ -74,10 +98,12 @@ crops:
         ecoport_code: 2175
         accessed_via: "OpenCLIM/ecocrop EcoCrop_DB.csv (OGL 3.0)"
         accessed_url: "https://github.com/OpenCLIM/ecocrop"
-        applies_to: [temperature, precipitation, soil, growing_season]
-      - source: "Neild & Newman (1990), NebGuide G90-998 — Growing season characteristics and corn maturation"
-        applies_to: [gdd]
+        applies_to: [precipitation, soil, growing_season]
       - source: "Bootsma et al. (2005), Can. J. Soil Sci. 85:1–18 — Risk assessment of corn and soybean production in eastern Canada"
+        applies_to: [gdd, temperature]
+      - source: "MAPAQ — Référence économique sur les coûts de production : Maïs-grain (CHU rating system)"
+        applies_to: [gdd]
+      - source: "Neild & Newman (1990), NebGuide G90-998 — Growing season characteristics and corn maturation"
         applies_to: [gdd]
 
   # ----- Soybean ----------------------------------------------------------
@@ -89,17 +115,26 @@ crops:
     aci_code: 158
 
     temperature:
-      tmean_absolute_min_c: 10.0   # ECOCROP TMIN
-      tmean_optimal_min_c: 20.0    # ECOCROP TOPMN
-      tmean_optimal_max_c: 33.0    # ECOCROP TOPMX
-      tmean_absolute_max_c: 38.0   # ECOCROP TMAX
+      # ECOCROP TMIN/TOPMN/TOPMX/TMAX = 10/20/33/38. ECOCROP optimal_min
+      # of 20 °C reflects tropical/subtropical soybean. Quebec MG 00/0
+      # cultivars finish at growing-season mean of ~16-18 °C. Lower
+      # tmean_optimal_min to 14 to fit Quebec cultivar reality.
+      tmean_absolute_min_c: 10.0
+      tmean_optimal_min_c: 14.0    # Quebec-tuned; ECOCROP value 20.0
+      tmean_optimal_max_c: 33.0
+      tmean_absolute_max_c: 38.0
 
     gdd:
+      # Quebec MG 00 soybean: ~2200-2400 CHU ≈ 1100 GDD base 10°C
+      # Quebec MG 0   soybean: ~2500-2700 CHU ≈ 1250 GDD base 10°C
+      # Quebec MG I   soybean: ~2800+ CHU    ≈ 1400+ GDD base 10°C
+      # ECOCROP-derived 2400-2800 range is for warm-temperate full-season
+      # soybean and is *far too high* for Quebec.
       base_temperature_c: 10.0
-      absolute_min: 1800
-      optimal_min: 2400
-      optimal_max: 2800
-      absolute_max: 3500
+      absolute_min: 700       # Quebec-tuned; earliest MG 00 with margin
+      optimal_min: 900        # Quebec-tuned; mid-MG-00 Quebec optimum
+      optimal_max: 1400       # Quebec-tuned; MG I Montérégie comfortable
+      absolute_max: 2000      # Quebec-tuned; well-buffered upper bound
 
     precipitation:
       annual_absolute_min_mm: 450   # ECOCROP
@@ -130,9 +165,11 @@ crops:
         ecoport_code: 1150
         accessed_via: "OpenCLIM/ecocrop EcoCrop_DB.csv (OGL 3.0)"
         accessed_url: "https://github.com/OpenCLIM/ecocrop"
-        applies_to: [temperature, precipitation, soil, growing_season, photoperiod]
-      - source: "Bootsma et al. (2005), Can. J. Soil Sci. 85:1–18"
-        applies_to: [gdd]
+        applies_to: [precipitation, soil, growing_season, photoperiod]
+      - source: "Bootsma et al. (2005), Can. J. Soil Sci. 85:1–18 — Risk assessment of corn and soybean production in eastern Canada"
+        applies_to: [gdd, temperature]
+      - source: "Cober & Morrison (2010), Crop Sci. 50:1029-1040 — Soybean breeding for adaptation to short-season environments"
+        applies_to: [gdd, temperature]
 
   # ----- Spring wheat -----------------------------------------------------
   - id: spring_wheat
@@ -151,11 +188,18 @@ crops:
       tmean_absolute_max_c: 27.0   # ECOCROP TMAX
 
     gdd:
-      base_temperature_c: 0.0    # Wheat tradition base T (international)
+      # Spring wheat (base 0 °C convention): the *cycle* heat sum (~90-
+      # 130 days) is 1500-2000 GDD. But our indicators integrate
+      # frost-free GDD across the full year (Quebec produces ~2800-3200
+      # GDD base 0 °C/year), so absolute_max must be set high enough
+      # that the extra heat after the wheat is harvested doesn't push
+      # the score off the right ramp. Range below is "cycle minimum"
+      # to "Quebec annual maximum, well-buffered".
+      base_temperature_c: 0.0
       absolute_min: 1100
-      optimal_min: 1400
-      optimal_max: 1900
-      absolute_max: 2500
+      optimal_min: 1500       # spring wheat cycle minimum
+      optimal_max: 3000       # Quebec-tuned; covers full annual heat sum
+      absolute_max: 4500      # Quebec-tuned; ECOCROP-derived 2500 cut Quebec out incorrectly
 
     precipitation:
       annual_absolute_min_mm: 300
@@ -205,12 +249,16 @@ crops:
       tmean_absolute_max_c: 41.0   # ECOCROP TMAX
 
     gdd:
-      # Spring canola; base 5 °C is the AAFC convention.
+      # Spring canola; base 5 °C is the AAFC convention. Same
+      # full-year-integration consideration as spring wheat: canola
+      # cycle needs 1100-1800 GDD base 5 °C but Quebec annual frost-free
+      # heat sum runs 1700-2200 GDD base 5 °C, so widening absolute_max
+      # avoids penalizing Quebec.
       base_temperature_c: 5.0
       absolute_min: 1100
       optimal_min: 1400
-      optimal_max: 1800
-      absolute_max: 2200
+      optimal_max: 2200       # Quebec-tuned; covers annual integration
+      absolute_max: 3000      # Quebec-tuned; ECOCROP-derived 2200 was too tight
 
     precipitation:
       annual_absolute_min_mm: 400

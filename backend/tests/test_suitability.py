@@ -30,17 +30,32 @@ def test_default_quebec_catalogue_loads():
     assert cat.schema_version == 1
 
 
-def test_corn_temperature_window_matches_ecocrop():
+def test_corn_temperature_window_quebec_tuned():
+    """The corn temperature window is Quebec-tuned (lower tmean_optimal_min
+    than ECOCROP's tropical baseline); see the YAML's cultivar-calibration
+    notes."""
     cat = requirements.load_catalogue()
     corn = cat.by_id("corn_grain")
     assert corn.scientific_name == "Zea mays"
     assert corn.ecoport_code == 2175
     t = corn.temperature
-    # ECOCROP Zea mays: TMIN=10, TOPMN=18, TOPMX=33, TMAX=47
-    assert t.tmean_absolute_min_c == 10.0
-    assert t.tmean_optimal_min_c == 18.0
-    assert t.tmean_optimal_max_c == 33.0
-    assert t.tmean_absolute_max_c == 47.0
+    assert t.tmean_absolute_min_c == 10.0    # ECOCROP TMIN preserved
+    assert t.tmean_optimal_min_c == 14.0     # Quebec-tuned; ECOCROP 18.0
+    assert t.tmean_optimal_max_c == 33.0     # ECOCROP TOPMX preserved
+    assert t.tmean_absolute_max_c == 47.0    # ECOCROP TMAX preserved
+
+
+def test_corn_gdd_window_quebec_tuned():
+    """Corn GDD bounds are tuned for Quebec MG range (2200-3000 CHU)."""
+    cat = requirements.load_catalogue()
+    corn = cat.by_id("corn_grain")
+    g = corn.gdd
+    assert g.base_temperature_c == 10.0
+    # Cover Quebec MG range (~700-1500 GDD base 10 °C) plus margin.
+    assert g.absolute_min == 700
+    assert g.optimal_min == 1000
+    assert g.optimal_max == 1500
+    assert g.absolute_max == 2000
 
 
 def test_unknown_crop_raises():
@@ -216,7 +231,7 @@ def test_score_crop_perfect_conditions_for_corn():
     ind = xr.Dataset(
         {
             "tmean_growing_c": xr.DataArray([[22.0]], dims=("y", "x")),
-            "gdd": xr.DataArray([[2200.0]], dims=("y", "x")),
+            "gdd": xr.DataArray([[1200.0]], dims=("y", "x")),
             "annual_precip_mm": xr.DataArray([[800.0]], dims=("y", "x")),
             "growing_season_days": xr.DataArray([[200.0]], dims=("y", "x")),
         }
@@ -248,7 +263,7 @@ def test_score_crop_includes_soil_ph_when_provided():
     ind = xr.Dataset(
         {
             "tmean_growing_c": xr.DataArray([[22.0]], dims=("y", "x")),
-            "gdd": xr.DataArray([[2200.0]], dims=("y", "x")),
+            "gdd": xr.DataArray([[1200.0]], dims=("y", "x")),
             "annual_precip_mm": xr.DataArray([[800.0]], dims=("y", "x")),
             "growing_season_days": xr.DataArray([[200.0]], dims=("y", "x")),
         }
@@ -272,7 +287,7 @@ def test_rank_crops_returns_all():
     ind = xr.Dataset(
         {
             "tmean_growing_c": xr.DataArray([[22.0]], dims=("y", "x")),
-            "gdd": xr.DataArray([[2200.0]], dims=("y", "x")),
+            "gdd": xr.DataArray([[1200.0]], dims=("y", "x")),
             "annual_precip_mm": xr.DataArray([[800.0]], dims=("y", "x")),
             "growing_season_days": xr.DataArray([[200.0]], dims=("y", "x")),
         }
