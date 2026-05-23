@@ -123,6 +123,18 @@ crops:
       annual_precip_preferred_mm: 700
       ph_preferred: 6.5
 
+    wofost:
+      # Tier 2 cultivar mapping. Grain_maize_203 (TSUM total 1655 ≈
+      # 2700 CHU) matches Quebec mid-to-long-MG corn; the cultivar
+      # sweep (commit 461ddbb) showed it gives the most realistic
+      # Sep-5 maturity date for Montérégie.
+      crop_name: maize
+      variety_name: Grain_maize_203
+      emergence_month: 5
+      emergence_day: 15
+      harvest_month: 10
+      harvest_day: 31
+
     citations:
       - source: FAO ECOCROP
         ecoport_code: 2175
@@ -200,6 +212,18 @@ crops:
       gdd_preferred: 1200
       annual_precip_preferred_mm: 800
       ph_preferred: 6.2
+
+    wofost:
+      # Soybean_901 (TSUM total 1200) is the shortest-season PCSE
+      # soybean cultivar — closest to Quebec MG 0/00. Like corn, the
+      # PCSE soybean parameter sets are EU-calibrated; Tier 3 bias
+      # correction against StatCan FCRS is the eventual fix.
+      crop_name: soybean
+      variety_name: Soybean_901
+      emergence_month: 5
+      emergence_day: 25
+      harvest_month: 10
+      harvest_day: 15
 
     citations:
       - source: FAO ECOCROP
@@ -343,6 +367,18 @@ crops:
       gdd_preferred: 1700
       annual_precip_preferred_mm: 600
       ph_preferred: 7.0
+
+    wofost:
+      # Oilseed_rape_1002 (TSUM total 900) — short-cycle spring canola.
+      # NOTE: PCSE's oilseed_rape parameter sets are tuned for European
+      # winter-and-spring rape; treat the Quebec spring-canola yield as
+      # indicative pending calibration.
+      crop_name: rapeseed
+      variety_name: Oilseed_rape_1002
+      emergence_month: 5
+      emergence_day: 10
+      harvest_month: 9
+      harvest_day: 30
 
     citations:
       - source: FAO ECOCROP

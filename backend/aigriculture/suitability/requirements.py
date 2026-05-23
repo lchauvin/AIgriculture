@@ -231,6 +231,25 @@ class Preference(BaseModel):
     ph_preferred: float | None = None
 
 
+class WofostMapping(BaseModel):
+    """Maps a catalogue crop to a PCSE/WOFOST cultivar for Tier 2 yield.
+
+    Crops without a WofostMapping are skipped by the Tier 2 yield path
+    (e.g. spring wheat — PCSE ships only winter-wheat parameter sets).
+    The dates are month/day within the simulation year; the runner
+    pairs them with each historical year.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    crop_name: str  # PCSE YAMLCropDataProvider crop name (e.g. "maize")
+    variety_name: str  # PCSE variety (e.g. "Grain_maize_203")
+    emergence_month: int = Field(ge=1, le=12)
+    emergence_day: int = Field(ge=1, le=31)
+    harvest_month: int = Field(ge=1, le=12)
+    harvest_day: int = Field(ge=1, le=31)
+
+
 class Citation(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -260,6 +279,7 @@ class CropRequirements(BaseModel):
     growing_season: GrowingSeason
     frost: FrostTolerance
     preference: Preference | None = None
+    wofost: WofostMapping | None = None
     photoperiod: Literal["short_day", "long_day", "neutral"] | None = None
 
     citations: list[Citation]
@@ -317,5 +337,6 @@ __all__ = [
     "SoilRequirements",
     "TemperatureRequirements",
     "TrapezoidBounds",
+    "WofostMapping",
     "load_catalogue",
 ]

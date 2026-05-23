@@ -134,6 +134,40 @@ class TestEnvelopeRequest:
         with pytest.raises(ValueError, match="too large"):
             EnvelopeRequest(bbox=(-80.0, 40.0, -70.0, 50.0))
 
+    def test_include_yield_defaults_false(self) -> None:
+        req = EnvelopeRequest(bbox=(-74.0, 45.0, -73.0, 46.0))
+        assert req.include_yield is False
+
+
+class TestCropScoreYield:
+    def test_carries_optional_yield(self) -> None:
+        score = CropEnvelopeScore(
+            crop_id="corn_grain",
+            scientific_name="Zea mays",
+            common_name_en="Corn for Grain",
+            envelope_score=0.9,
+            preference_score=0.8,
+            combined_score=0.72,
+            gaez_class=GAEZClass.S1,
+            yield_t_ha=10.4,
+            wofost_cultivar="maize/Grain_maize_203",
+        )
+        assert score.yield_t_ha == 10.4
+        assert score.wofost_cultivar == "maize/Grain_maize_203"
+
+    def test_yield_defaults_none(self) -> None:
+        bare = CropEnvelopeScore(
+            crop_id="x",
+            scientific_name="X y",
+            common_name_en="X",
+            envelope_score=0.5,
+            preference_score=0.5,
+            combined_score=0.25,
+            gaez_class=GAEZClass.S3,
+        )
+        assert bare.yield_t_ha is None
+        assert bare.wofost_cultivar is None
+
 
 class TestJobView:
     def test_succeeded_must_have_result(self) -> None:

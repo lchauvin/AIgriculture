@@ -65,6 +65,17 @@ def test_unknown_crop_raises():
         cat.by_id("not_a_crop")
 
 
+def test_wofost_mappings_present_for_supported_crops():
+    """Corn / soybean / canola map to PCSE cultivars; spring wheat does
+    not (PCSE ships only winter wheat)."""
+    cat = requirements.load_catalogue()
+    assert cat.by_id("corn_grain").wofost is not None
+    assert cat.by_id("corn_grain").wofost.variety_name == "Grain_maize_203"
+    assert cat.by_id("soybean").wofost is not None
+    assert cat.by_id("canola").wofost is not None
+    assert cat.by_id("spring_wheat").wofost is None
+
+
 def test_trapezoid_bounds_validate_ordering(tmp_path: Path):
     """A YAML with absolute_min >= optimal_min must fail at load time."""
     bad = tmp_path / "bad.yaml"

@@ -150,6 +150,16 @@ class EnvelopeRequest(BaseModel):
             "overlays). Heavier payload; default off."
         ),
     )
+    include_yield: bool = Field(
+        default=False,
+        description=(
+            "When true, run Tier 2 (PCSE/WOFOST potential production) for "
+            "each WOFOST-mapped crop and attach a region-mean yield "
+            "estimate. Only supported for historical scenarios (WOFOST "
+            "needs solar radiation, which CanDCS-M6 does not provide). "
+            "Adds several seconds per crop."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_bbox(self) -> "EnvelopeRequest":
@@ -203,6 +213,20 @@ class CropEnvelopeScore(BaseModel):
     per_factor_envelope: dict[str, float] = Field(
         default_factory=dict,
         description="Per-factor envelope sub-scores (region-mean).",
+    )
+
+    # ---- Tier 2 yield (populated only when include_yield=true) ----
+    yield_t_ha: float | None = Field(
+        default=None,
+        description=(
+            "Region-mean WOFOST potential-production yield (t/ha @ 14% "
+            "moisture), averaged across the historical years. None when "
+            "yield wasn't requested or the crop has no WOFOST mapping."
+        ),
+    )
+    wofost_cultivar: str | None = Field(
+        default=None,
+        description="PCSE cultivar used for the yield estimate, when present.",
     )
 
 

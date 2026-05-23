@@ -22,6 +22,7 @@ from uuid import UUID
 import numpy as np
 import xarray as xr
 
+from ..crop_models import wofost_runner
 from ..data.agera5 import AgERA5Source
 from ..data.candcs_m6 import CanDCSM6Source
 from ..data.soilgrids import SoilGridsSource
@@ -121,7 +122,15 @@ def _compute_envelope(
         lat=ds["lat"], lon=ds["lon"], kwargs={"fill_value": "extrapolate"},
     )
 
-    # 3) Score every requested crop.
+    # 3) Optionally run Tier 2 (WOFOST) yields. Historical only — WOFOST
+    #    needs solar radiation, which CanDCS-M6 doesn't provide.
+    yields: dict[str, tuple[float, str]] = {}
+    if req.include_yield and isinstance(req.scenario, HistoricalScenario):
+        yields = _compute_yields(
+            req.bbox, req.scenario, crops, cache_dir=agera5_cache_dir
+        )
+
+    # 4) Score every requested crop.
     crop_scores: list[CropEnvelopeScore] = []
     grids: list[CropSuitabilityGrid] | None = (
         [] if req.include_grids else None
@@ -131,11 +140,17 @@ def _compute_envelope(
             ds, gdd_base_temperature_c=crop.gdd.base_temperature_c
         )
         sui = envelope_mod.score_crop(ind, crop, soil_ph=soil_ph)
-        crop_scores.append(_summarize_crop(sui, crop))
+        score = _summarize_crop(sui, crop)
+        if crop.id in yields:
+            y, cultivar = yields[crop.id]
+            score = score.model_copy(
+                update={"yield_t_ha": y, "wofost_cultivar": cultivar}
+            )
+        crop_scores.append(score)
         if grids is not None:
             grids.append(_grid_for_crop(sui, crop.id))
 
-    # 4) Provenance.
+    # 5) Provenance.
     soil_prov = soil.provenance(bbox=req.bbox, time_range=None)
     prov: list[ProvenanceStamp] = [
         climate_prov,
@@ -260,6 +275,67 @@ def _grid_for_crop(
         cell_size_deg=(d_lat, d_lon),
         score_grid=score_grid,
     )
+
+
+def _compute_yields(
+    bbox: tuple[float, float, float, float],
+    scenario: HistoricalScenario,
+    crops: list[requirements_mod.CropRequirements],
+    *,
+    cache_dir: Path,
+) -> dict[str, tuple[float, str]]:
+    """Run WOFOST PP per (WOFOST-mapped crop × year) on the region-mean
+    weather; return {crop_id: (mean_yield_t_ha, cultivar)}.
+
+    Crops with no ``wofost`` mapping are skipped. The yield path needs
+    solar radiation and a longer window (Apr-Oct, to let corn reach
+    maturity), so it pulls its own AgERA5 slice separate from the Tier
+    1 envelope's Apr-Sep / 3-variable pull.
+    """
+    agera5 = AgERA5Source(cache_dir=cache_dir)
+    lat_c = (bbox[1] + bbox[3]) / 2.0
+    lon_c = (bbox[0] + bbox[2]) / 2.0
+
+    out: dict[str, tuple[float, str]] = {}
+    for crop in crops:
+        wf = crop.wofost
+        if wf is None:
+            continue
+        per_year: list[float] = []
+        for year in sorted(scenario.years):
+            ds = agera5.load(
+                bbox=bbox,
+                time_range=(dt.date(year, 4, 1), dt.date(year, 10, 31)),
+                variables=("t2m_min", "t2m_max", "precip", "solar_rad"),
+            ).rename(
+                {
+                    "t2m_min": "tasmin",
+                    "t2m_max": "tasmax",
+                    "precip": "pr",
+                    "solar_rad": "rsds",
+                }
+            )
+            try:
+                result = wofost_runner.run_wofost_pp(
+                    weather_ds=ds,
+                    crop_name=wf.crop_name,
+                    variety_name=wf.variety_name,
+                    campaign_start=dt.date(year, 4, 1),
+                    emergence=dt.date(year, wf.emergence_month, wf.emergence_day),
+                    harvest=dt.date(year, wf.harvest_month, wf.harvest_day),
+                    latitude=lat_c,
+                    longitude=lon_c,
+                )
+            except Exception:  # noqa: BLE001
+                # A single bad year shouldn't sink the whole crop. Skip it.
+                continue
+            per_year.append(result.yield_t_ha)
+        if per_year:
+            out[crop.id] = (
+                sum(per_year) / len(per_year),
+                f"{wf.crop_name}/{wf.variety_name}",
+            )
+    return out
 
 
 def _summarize_crop(
