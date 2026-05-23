@@ -1,6 +1,16 @@
 # 04 — Uncertainty and validation
 
-> **Status:** v0.1 — drafted.
+> **Status:** v0.2 — Part B harness implemented (MVP).
+>
+> The hindcast harness described in Part B now exists as
+> `backend/aigriculture/validation/` (`hindcast.py` + `statcan_fcrs.py`),
+> exercised by `backend/notebooks/exploratory/quebec_hindcast_corn.py`. The
+> MVP implements the **observed-climate backtest** (B.1 step 1–4 with
+> observed AgERA5 in place of frozen 1990 projections — see the B.1 note
+> below) for grain corn at **provincial** resolution against StatCan FCRS
+> Table 32-10-0359-01. Still pending: Census-Agricultural-Region spatial
+> detail, the multi-year span needed for meaningful RMSE/R²/trend, and the
+> Tier-3 spatiotemporal CV (B.2).
 
 ## Purpose
 
@@ -126,6 +136,19 @@ predictions match what we observed today." This is **hindcasting**.
      (we cannot meaningfully validate field-level skill against a province-
      wide annual mean — flag that explicitly).
 
+> **Implemented MVP — observed-climate backtest.** The harness as built
+> drives WOFOST with **observed AgERA5** weather for each year (not a
+> 1990-frozen projection) and compares to the StatCan observed yield for
+> that same year. This isolates the *crop-model* skill given near-perfect
+> weather; it does **not** test climate-projection skill (using current
+> CMIP6 historical runs to "forecast" 1995 is anachronistic — Part C
+> item 2). Because WOFOST runs in **potential production** (no water /
+> nutrient / pest stress), predicted yields sit *above* observed farm
+> yields; the harness **reports** this positive bias rather than
+> correcting it (Tier 3 will absorb the trend). The 2018 smoke run gives
+> predicted 10.82 vs observed 9.44 t/ha (bias +1.38) — the expected sign
+> and magnitude for a PP run.
+
 ### B.2 Cross-validation strategy
 
 Random K-fold cross-validation overstates skill on agricultural data due
@@ -220,11 +243,13 @@ feature.
 
 ## Verification checklist
 
-- [ ] Hindcast harness runs end-to-end for one Quebec CAR × one crop ×
-      one historical window (e.g., 1990 → 2000 for grain corn in CAR
-      Montérégie).
-- [ ] Per-decade RMSE, bias, R² reported.
-- [ ] LOYO / LORO / LOROYO skill all computed and compared.
-- [ ] Structural-break years (GMO adoption, major policy changes) flagged
-      in the report.
-- [ ] Each citation above resolves to a verified BibTeX entry.
+- [x] Hindcast harness runs end-to-end for one crop × one year (grain corn,
+      Quebec province, 2018) — `quebec_hindcast_corn.py`. *Pending:* CAR-level
+      spatial detail and a multi-year window (needs more AgERA5 in cache).
+- [~] RMSE, bias, R², trend reported — implemented in `compute_metrics`;
+      meaningful values await the multi-year run (single year ⇒ R²/trend None).
+- [ ] LOYO / LORO / LOROYO skill all computed and compared (Tier-3 CV work).
+- [x] Structural-break years (GMO adoption, major policy changes) flagged
+      in the report — `KNOWN_BREAKS`, filtered to crop + year window.
+- [x] Each citation above resolves to a verified BibTeX entry — StatCan FCRS
+      added as `@StatCanFCRS2026`.
