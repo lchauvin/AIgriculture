@@ -1,6 +1,11 @@
 "use client";
 
-import type { CropEnvelopeScore, EnvelopeResult, Scenario } from "@/app/lib/api";
+import type {
+  CropEnvelopeScore,
+  EnvelopeResult,
+  ProvenanceStamp,
+  Scenario,
+} from "@/app/lib/api";
 
 interface ResultPanelProps {
   result: EnvelopeResult;
@@ -61,7 +66,7 @@ export default function ResultPanel({
         </tbody>
       </table>
 
-      <ProvenanceList result={result} />
+      <ProvenanceList stamps={result.provenance} />
     </div>
   );
 }
@@ -126,7 +131,7 @@ const GAEZ_COLOR: Record<string, string> = {
   N: "bg-rose-800 text-rose-50",
 };
 
-function GaezBadge({ cls }: { cls: string }) {
+export function GaezBadge({ cls }: { cls: string }) {
   return (
     <span
       className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${
@@ -138,23 +143,23 @@ function GaezBadge({ cls }: { cls: string }) {
   );
 }
 
-function describeScenario(scenario: Scenario): string {
+export function describeScenario(scenario: Scenario): string {
   if (scenario.kind === "historical") {
     return `historical ${scenario.years.join(", ")}`;
   }
   return `${scenario.gcm} ${scenario.ssp.toUpperCase()} ${scenario.start_year}–${scenario.end_year}`;
 }
 
-function ProvenanceList({ result }: { result: EnvelopeResult }) {
-  if (!result.provenance.length) return null;
+export function ProvenanceList({ stamps }: { stamps: ProvenanceStamp[] }) {
+  if (!stamps.length) return null;
   return (
     <details className="text-xs text-slate-500">
       <summary className="cursor-pointer text-slate-400 hover:text-slate-200">
-        Provenance — {result.provenance.length} source
-        {result.provenance.length === 1 ? "" : "s"}
+        Provenance — {stamps.length} source
+        {stamps.length === 1 ? "" : "s"}
       </summary>
       <ul className="mt-2 space-y-1 font-mono">
-        {result.provenance.map((p) => (
+        {stamps.map((p) => (
           <li key={p.fingerprint}>
             <span className="text-slate-300">{p.source}</span>{" "}
             <span className="text-slate-500">v{p.version}</span>{" "}

@@ -4,6 +4,9 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import BboxControl from "@/app/components/BboxControl";
+import ComparisonPanel, {
+  type OverlaySide,
+} from "@/app/components/ComparisonPanel";
 import ResultPanel from "@/app/components/ResultPanel";
 import ScenarioControl from "@/app/components/ScenarioControl";
 import {
@@ -32,16 +35,31 @@ const DEFAULT_SCENARIO: Scenario = {
   kind: "historical",
   years: [2017, 2018, 2019],
 };
+// Default comparison side (B) — a mid-century middle-of-the-road future,
+// so the out-of-the-box compare run shows present vs ~2050.
+const DEFAULT_SCENARIO_B: Scenario = {
+  kind: "future",
+  gcm: "CanESM5",
+  ssp: "ssp245",
+  start_year: 2049,
+  end_year: 2051,
+};
+
+type Mode = "single" | "compare";
 
 export default function Home() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [bbox, setBbox] = useState<Bbox>(DEFAULT_BBOX);
+  const [mode, setMode] = useState<Mode>("single");
   const [scenario, setScenario] = useState<Scenario>(DEFAULT_SCENARIO);
+  const [scenarioB, setScenarioB] = useState<Scenario>(DEFAULT_SCENARIO_B);
   const [includeYield, setIncludeYield] = useState(false);
   const [job, setJob] = useState<JobView | null>(null);
+  const [jobB, setJobB] = useState<JobView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedCropId, setSelectedCropId] = useState<string | null>(null);
+  const [overlaySide, setOverlaySide] = useState<OverlaySide>("B");
   const pollAbort = useRef<AbortController | null>(null);
 
   // Health check on mount so the user knows up-front whether the
@@ -59,15 +77,24 @@ export default function Home() {
   }, []);
 
   const isRunning =
-    job?.status === "pending" || job?.status === "running";
+    isJobRunning(job) || (mode === "compare" && isJobRunning(jobB));
 
-  const result: EnvelopeResult | null =
+  const resultA: EnvelopeResult | null =
     job?.status === "succeeded" ? job.result : null;
+  const resultB: EnvelopeResult | null =
+    jobB?.status === "succeeded" ? jobB.result : null;
+  // Single-mode rendering (map extent, ResultPanel) keys off scenario A.
+  const result = resultA;
+
+  // In compare mode the map overlays one side at a time; in single mode
+  // it's always scenario A.
+  const overlayResult =
+    mode === "compare" && overlaySide === "B" ? resultB : resultA;
 
   const selectedGrid = useMemo(() => {
-    if (!result?.grids || !selectedCropId) return null;
-    return result.grids.find((g) => g.crop_id === selectedCropId) ?? null;
-  }, [result, selectedCropId]);
+    if (!overlayResult?.grids || !selectedCropId) return null;
+    return overlayResult.grids.find((g) => g.crop_id === selectedCropId) ?? null;
+  }, [overlayResult, selectedCropId]);
 
   // The bbox rectangle should frame the *actual data extent* when the
   // current bbox state matches whatever the result was computed for —
@@ -98,16 +125,20 @@ export default function Home() {
     const controller = new AbortController();
     pollAbort.current = controller;
 
-    try {
+    // Create + poll one envelope job, streaming updates into `setView`.
+    // Yield (Tier 2 / WOFOST) is single-mode + historical only.
+    const runOne = async (
+      scn: Scenario,
+      setView: (j: JobView) => void,
+    ): Promise<void> => {
       const accepted = await api.createEnvelope({
         bbox,
-        scenario,
+        scenario: scn,
         include_grids: true,
-        // Yield (Tier 2 / WOFOST) is historical-only — the backend
-        // ignores include_yield for future scenarios.
-        include_yield: includeYield && scenario.kind === "historical",
+        include_yield:
+          mode === "single" && includeYield && scn.kind === "historical",
       });
-      const initial: JobView = {
+      setView({
         job_id: accepted.job_id,
         status: "pending",
         created_at: new Date().toISOString(),
@@ -115,12 +146,24 @@ export default function Home() {
         completed_at: null,
         error: null,
         result: null,
-      };
-      setJob(initial);
+      });
       await pollJob(accepted.job_id, {
         signal: controller.signal,
-        onUpdate: setJob,
+        onUpdate: setView,
       });
+    };
+
+    try {
+      if (mode === "single") {
+        setJobB(null);
+        await runOne(scenario, setJob);
+      } else {
+        // Run both scenarios concurrently over the same region.
+        await Promise.all([
+          runOne(scenario, setJob),
+          runOne(scenarioB, setJobB),
+        ]);
+      }
     } catch (e) {
       if ((e as DOMException).name === "AbortError") return;
       const msg =
@@ -129,6 +172,12 @@ export default function Home() {
           : (e as Error).message;
       setError(msg);
     }
+  }
+
+  function switchMode(next: Mode) {
+    if (next === mode) return;
+    setMode(next);
+    setSelectedCropId(null);
   }
 
   return (
@@ -157,6 +206,8 @@ export default function Home() {
         >
           <ConnectionBadge health={health} error={healthError} />
 
+          <ModeToggle mode={mode} onChange={switchMode} disabled={isRunning} />
+
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
               Region (EPSG:4326 bbox)
@@ -164,12 +215,19 @@ export default function Home() {
             <BboxControl bbox={bbox} onChange={setBbox} disabled={isRunning} />
             <p className="text-xs text-slate-500">
               Each side must be ≤ 5°. Default = southern Quebec.
+              {mode === "compare" && " Both scenarios share this region."}
             </p>
           </section>
 
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-              Scenario
+              {mode === "compare" ? (
+                <>
+                  Scenario <span className="text-sky-400">A</span> (baseline)
+                </>
+              ) : (
+                "Scenario"
+              )}
             </h2>
             <ScenarioControl
               scenario={scenario}
@@ -178,23 +236,38 @@ export default function Home() {
             />
           </section>
 
-          <section className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input
-                type="checkbox"
-                checked={includeYield}
-                disabled={isRunning || scenario.kind !== "historical"}
-                onChange={(e) => setIncludeYield(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-600 bg-slate-900"
+          {mode === "compare" && (
+            <section className="flex flex-col gap-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                Scenario <span className="text-amber-400">B</span> (comparison)
+              </h2>
+              <ScenarioControl
+                scenario={scenarioB}
+                onChange={setScenarioB}
+                disabled={isRunning}
               />
-              Estimate yield (Tier 2 / WOFOST)
-            </label>
-            <p className="text-xs text-slate-500">
-              {scenario.kind === "historical"
-                ? "Runs the process-based crop model per crop. Adds a few seconds; spring wheat is unsupported in WOFOST."
-                : "Yield is historical-only — WOFOST needs solar radiation, which the CanDCS-M6 projections don't carry."}
-            </p>
-          </section>
+            </section>
+          )}
+
+          {mode === "single" && (
+            <section className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={includeYield}
+                  disabled={isRunning || scenario.kind !== "historical"}
+                  onChange={(e) => setIncludeYield(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-600 bg-slate-900"
+                />
+                Estimate yield (Tier 2 / WOFOST)
+              </label>
+              <p className="text-xs text-slate-500">
+                {scenario.kind === "historical"
+                  ? "Runs the process-based crop model per crop. Adds a few seconds; spring wheat is unsupported in WOFOST."
+                  : "Yield is historical-only — WOFOST needs solar radiation, which the CanDCS-M6 projections don't carry."}
+              </p>
+            </section>
+          )}
 
           <button
             type="button"
@@ -202,7 +275,13 @@ export default function Home() {
             disabled={isRunning || !health}
             className="rounded bg-emerald-600 px-4 py-2 font-medium text-emerald-50 transition enabled:hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
           >
-            {isRunning ? "Analyzing…" : "Analyze"}
+            {isRunning
+              ? mode === "compare"
+                ? "Comparing…"
+                : "Analyzing…"
+              : mode === "compare"
+                ? "Compare"
+                : "Analyze"}
           </button>
 
           {error && (
@@ -211,14 +290,32 @@ export default function Home() {
             </div>
           )}
 
-          {job && <JobStatusBar job={job} />}
-
-          {result && (
-            <ResultPanel
-              result={result}
-              selectedCropId={selectedCropId}
-              onSelectCrop={setSelectedCropId}
-            />
+          {mode === "single" ? (
+            <>
+              {job && <JobStatusBar job={job} />}
+              {result && (
+                <ResultPanel
+                  result={result}
+                  selectedCropId={selectedCropId}
+                  onSelectCrop={setSelectedCropId}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              {job && <JobStatusBar job={job} label="A" />}
+              {jobB && <JobStatusBar job={jobB} label="B" />}
+              {resultA && resultB && (
+                <ComparisonPanel
+                  resultA={resultA}
+                  resultB={resultB}
+                  selectedCropId={selectedCropId}
+                  onSelectCrop={setSelectedCropId}
+                  overlaySide={overlaySide}
+                  onOverlaySideChange={setOverlaySide}
+                />
+              )}
+            </>
           )}
         </aside>
 
@@ -273,7 +370,41 @@ function bboxesApproxEqual(a: Bbox, b: Bbox, eps = 1e-6): boolean {
   return true;
 }
 
-function JobStatusBar({ job }: { job: JobView }) {
+function isJobRunning(job: JobView | null): boolean {
+  return job?.status === "pending" || job?.status === "running";
+}
+
+function ModeToggle({
+  mode,
+  onChange,
+  disabled,
+}: {
+  mode: Mode;
+  onChange: (mode: Mode) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex rounded border border-slate-600 p-0.5 text-sm">
+      {(["single", "compare"] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(m)}
+          className={`flex-1 rounded px-3 py-1 capitalize transition ${
+            mode === m
+              ? "bg-slate-600 text-slate-100"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          {m === "single" ? "Single" : "Compare A/B"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function JobStatusBar({ job, label }: { job: JobView; label?: string }) {
   const tone =
     job.status === "succeeded"
       ? "border-emerald-800 bg-emerald-950/40 text-emerald-300"
@@ -283,7 +414,8 @@ function JobStatusBar({ job }: { job: JobView }) {
   return (
     <div className={`rounded border px-3 py-2 text-xs ${tone}`}>
       <div className="font-mono">
-        job {job.job_id.slice(0, 8)}… · status: {job.status}
+        {label ? `${label}: ` : ""}job {job.job_id.slice(0, 8)}… · status:{" "}
+        {job.status}
       </div>
       {job.error && <div className="mt-1 whitespace-pre-wrap">{job.error}</div>}
     </div>
