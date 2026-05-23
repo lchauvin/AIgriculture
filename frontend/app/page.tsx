@@ -38,6 +38,7 @@ export default function Home() {
   const [healthError, setHealthError] = useState<string | null>(null);
   const [bbox, setBbox] = useState<Bbox>(DEFAULT_BBOX);
   const [scenario, setScenario] = useState<Scenario>(DEFAULT_SCENARIO);
+  const [includeYield, setIncludeYield] = useState(false);
   const [job, setJob] = useState<JobView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedCropId, setSelectedCropId] = useState<string | null>(null);
@@ -102,6 +103,9 @@ export default function Home() {
         bbox,
         scenario,
         include_grids: true,
+        // Yield (Tier 2 / WOFOST) is historical-only — the backend
+        // ignores include_yield for future scenarios.
+        include_yield: includeYield && scenario.kind === "historical",
       });
       const initial: JobView = {
         job_id: accepted.job_id,
@@ -172,6 +176,24 @@ export default function Home() {
               onChange={setScenario}
               disabled={isRunning}
             />
+          </section>
+
+          <section className="flex flex-col gap-2">
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={includeYield}
+                disabled={isRunning || scenario.kind !== "historical"}
+                onChange={(e) => setIncludeYield(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-600 bg-slate-900"
+              />
+              Estimate yield (Tier 2 / WOFOST)
+            </label>
+            <p className="text-xs text-slate-500">
+              {scenario.kind === "historical"
+                ? "Runs the process-based crop model per crop. Adds a few seconds; spring wheat is unsupported in WOFOST."
+                : "Yield is historical-only — WOFOST needs solar radiation, which the CanDCS-M6 projections don't carry."}
+            </p>
           </section>
 
           <button

@@ -52,6 +52,7 @@ export interface EnvelopeRequest {
   scenario?: Scenario;
   crops?: string[] | null;
   include_grids?: boolean;
+  include_yield?: boolean;
 }
 
 export interface CropEnvelopeScore {
@@ -65,6 +66,8 @@ export interface CropEnvelopeScore {
   gaez_class: GAEZClass;
   limiting_factor: string | null;
   per_factor_envelope: Record<string, number>;
+  yield_t_ha: number | null;
+  wofost_cultivar: string | null;
 }
 
 export interface CropSuitabilityGrid {

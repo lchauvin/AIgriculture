@@ -18,6 +18,9 @@ export default function ResultPanel({
   selectedCropId,
   onSelectCrop,
 }: ResultPanelProps) {
+  // Only show the yield column when at least one crop carries a yield.
+  const showYield = result.crops.some((c) => c.yield_t_ha != null);
+
   return (
     <div className="flex flex-col gap-3">
       <header>
@@ -27,6 +30,7 @@ export default function ResultPanel({
         <p className="mt-1 text-xs text-slate-500">
           Click a crop to overlay its per-cell suitability on the map. The
           ranking is by combined score (envelope × preference).
+          {showYield ? " Yield is WOFOST potential production (t/ha)." : ""}
         </p>
       </header>
 
@@ -38,6 +42,7 @@ export default function ResultPanel({
             <th className="py-2 text-right">envelope</th>
             <th className="py-2 text-right">preference</th>
             <th className="py-2 text-left">class</th>
+            {showYield && <th className="py-2 text-right">yield t/ha</th>}
             <th className="py-2 text-left">limited by</th>
           </tr>
         </thead>
@@ -46,6 +51,7 @@ export default function ResultPanel({
             <CropRow
               key={c.crop_id}
               crop={c}
+              showYield={showYield}
               selected={c.crop_id === selectedCropId}
               onToggle={() =>
                 onSelectCrop(c.crop_id === selectedCropId ? null : c.crop_id)
@@ -62,10 +68,12 @@ export default function ResultPanel({
 
 function CropRow({
   crop,
+  showYield,
   selected,
   onToggle,
 }: {
   crop: CropEnvelopeScore;
+  showYield: boolean;
   selected: boolean;
   onToggle: () => void;
 }) {
@@ -95,6 +103,14 @@ function CropRow({
       <td className="py-2">
         <GaezBadge cls={crop.gaez_class} />
       </td>
+      {showYield && (
+        <td
+          className="py-2 text-right font-mono text-slate-100"
+          title={crop.wofost_cultivar ?? undefined}
+        >
+          {crop.yield_t_ha != null ? crop.yield_t_ha.toFixed(2) : "—"}
+        </td>
+      )}
       <td className="py-2 text-xs text-slate-400">
         {crop.limiting_factor ?? "—"}
       </td>
