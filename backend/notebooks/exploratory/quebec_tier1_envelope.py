@@ -16,7 +16,7 @@ Pipeline:
 
 Run end-to-end:
 
-    .venv/bin/python backend/notebooks/exploratory/quebec_tier1_envelope.py
+    uv run python backend/notebooks/exploratory/quebec_tier1_envelope.py
 
 Prerequisites:
 

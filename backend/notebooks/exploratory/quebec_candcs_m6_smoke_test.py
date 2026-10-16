@@ -12,7 +12,7 @@ Fourth end-to-end exercise of the data layer — and the first that pulls
 
 Run end-to-end as a script:
 
-    .venv/bin/python backend/notebooks/exploratory/quebec_candcs_m6_smoke_test.py
+    uv run python backend/notebooks/exploratory/quebec_candcs_m6_smoke_test.py
 
 No credentials required; PAVICS OPeNDAP is open.
 """

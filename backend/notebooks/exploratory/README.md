@@ -22,7 +22,7 @@ We use the **percent (`# %%`) script format** rather than committing
 Convert to `.ipynb` on demand:
 
 ```bash
-.venv/bin/jupytext --to ipynb quebec_gdd_smoke_test.py
+uv run --with jupytext jupytext --to ipynb quebec_gdd_smoke_test.py
 ```
 
 ## Running
@@ -30,7 +30,7 @@ Convert to `.ipynb` on demand:
 These scripts are runnable end-to-end:
 
 ```bash
-.venv/bin/python backend/notebooks/exploratory/quebec_gdd_smoke_test.py
+uv run python backend/notebooks/exploratory/quebec_gdd_smoke_test.py
 ```
 
 Notebooks that hit live external services (the CDS API, Earth Engine,

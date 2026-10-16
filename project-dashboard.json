@@ -1,0 +1,19 @@
+{
+  "name": "AIgriculture",
+  "services": [
+    {
+      "name": "FastAPI Backend",
+      "type": "FastAPI",
+      "port": 8008,
+      "command": "uv run uvicorn aigriculture.api.app:app --reload --port 8008",
+      "cwd": "."
+    },
+    {
+      "name": "Next.js Frontend",
+      "type": "Next.js",
+      "port": 3232,
+      "command": "npm run dev",
+      "cwd": "frontend"
+    }
+  ]
+}

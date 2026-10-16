@@ -13,7 +13,7 @@ cp .env.local.example .env.local
 
 # in one terminal: backend
 cd ..  # back to repo root
-.venv/bin/uvicorn aigriculture.api.app:app --reload --port 8008
+uv run uvicorn aigriculture.api.app:app --reload --port 8008
 
 # in another terminal: frontend
 cd frontend

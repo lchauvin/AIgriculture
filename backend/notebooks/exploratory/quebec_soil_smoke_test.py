@@ -11,7 +11,7 @@ Second end-to-end exercise of the AIgriculture data layer:
 
 Run end-to-end as a script:
 
-    .venv/bin/python backend/notebooks/exploratory/quebec_soil_smoke_test.py
+    uv run python backend/notebooks/exploratory/quebec_soil_smoke_test.py
 
 Hits the live ISRIC WebDAV via GDAL's ``/vsicurl/``. No credentials
 required.

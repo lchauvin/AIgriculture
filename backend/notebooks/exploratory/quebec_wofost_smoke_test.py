@@ -30,7 +30,7 @@ assumes unlimited water and nutrients, no weeds, no pests. Tier 3
 
 Run end-to-end:
 
-    .venv/bin/python backend/notebooks/exploratory/quebec_wofost_smoke_test.py
+    uv run python backend/notebooks/exploratory/quebec_wofost_smoke_test.py
 
 Prerequisites:
 - ``~/.cdsapirc`` configured (AgERA5).

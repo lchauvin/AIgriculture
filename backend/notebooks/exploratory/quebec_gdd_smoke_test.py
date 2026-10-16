@@ -12,7 +12,7 @@ First end-to-end exercise of the AIgriculture data layer:
 Run interactively (cell-by-cell in VS Code / JupyterLab via jupytext) or
 end-to-end as a script:
 
-    .venv/bin/python backend/notebooks/exploratory/quebec_gdd_smoke_test.py
+    uv run python backend/notebooks/exploratory/quebec_gdd_smoke_test.py
 
 Requires:
 - A working ``~/.cdsapirc`` (see the project README / CDS setup notes).

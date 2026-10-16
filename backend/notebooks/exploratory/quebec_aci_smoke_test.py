@@ -11,7 +11,7 @@ Third end-to-end exercise of the data layer:
 
 Run end-to-end as a script:
 
-    .venv/bin/python backend/notebooks/exploratory/quebec_aci_smoke_test.py
+    uv run python backend/notebooks/exploratory/quebec_aci_smoke_test.py
 
 Prerequisites:
 
